@@ -2,8 +2,10 @@
 <html lang="fr">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes" />
   <title>Aziz Shop</title>
+  <!-- Manifest PWA -->
+  <link rel="manifest" href="./manifest.json" />
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- React & ReactDOM -->
@@ -11,6 +13,8 @@
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <!-- Babel Standalone -->
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <!-- Couleur du thème pour l'installation -->
+  <meta name="theme-color" content="#4b6cb7" />
 </head>
 <body>
   <div id="root"></div>
@@ -75,7 +79,6 @@
         return localStorage.getItem("lb_vitrine_gh_token_activated") === "true";
       });
 
-      // Gestion de l'edition/creation de produit
       const [editingProduct, setEditingProduct] = useState(null);
 
       // --- ETAT POUR IMGBB ---
@@ -147,7 +150,7 @@
         }
       };
 
-      // --- SYNCHRONISATION GITHUB (version corrigée) ---
+      // --- SYNCHRONISATION GITHUB ---
       const saveToGitHub = async (updatedProducts) => {
         const { token, owner, repo, path } = ghConfig;
         if (!token || !owner || !repo) {
@@ -163,7 +166,6 @@
         const contentBase64 = btoa(content);
 
         try {
-          // 1. Récupérer le SHA si le fichier existe
           let sha = null;
           const resGet = await fetch(url, {
             headers: { Authorization: `token ${token}` }
@@ -179,14 +181,12 @@
             return;
           }
 
-          // 2. Préparer le body
           const body = {
             message: "Mise à jour du catalogue (Aziz Shop)",
             content: contentBase64,
             ...(sha && { sha })
           };
 
-          // 3. PUT
           const resPut = await fetch(url, {
             method: "PUT",
             headers: {
@@ -209,7 +209,6 @@
         }
       };
 
-      // Chargement depuis GitHub
       const fetchFromGitHub = async () => {
         const { token, owner, repo, path } = ghConfig;
         if (!token || !owner || !repo) {
@@ -416,7 +415,6 @@
                       </button>
                     </div>
                   </div>
-                  {/* Informations techniques (cachées mais affichées pour le debug) */}
                   <details className="text-[11px] text-slate-500 bg-white/20 p-2 rounded-xl">
                     <summary className="cursor-pointer font-medium">Infos de connexion (debug)</summary>
                     <div className="mt-1 space-y-0.5">
@@ -612,6 +610,15 @@
     // Montage de l'application
     const root = ReactDOM.createRoot(document.getElementById('root'));
     root.render(<App />);
+
+    // --- ENREGISTREMENT DU SERVICE WORKER ---
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js')
+          .then(reg => console.log('Service Worker enregistré avec succès', reg))
+          .catch(err => console.error('Erreur SW :', err));
+      });
+    }
   </script>
 </body>
 </html>
