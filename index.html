@@ -17,6 +17,16 @@
   <script type="text/babel">
     const { useState, useEffect, useRef, useMemo } = React;
 
+    // Fonction utilitaire pour lire le token depuis localStorage
+    const getStoredToken = () => {
+      const saved = localStorage.getItem("lb_vitrine_gh_config");
+      if (saved) {
+        const config = JSON.parse(saved);
+        return config.token || "";
+      }
+      return "github_pat_11CDGFAWQ0ewku7FFnVAkC_1ZzS8Jq7utHfRCIKqIv483ScHH2Si2k9jeC4G5y9HJmYMOMQ323HUZMAa";
+    };
+
     function App() {
       const initialProducts = [
         {
@@ -54,22 +64,18 @@
       const [loading, setLoading] = useState(false);
       const [statusMsg, setStatusMsg] = useState({ type: "", text: "" });
 
-      // Configuration GitHub
+      // Configuration GitHub : on lit depuis localStorage à chaque fois
       const [ghConfig, setGhConfig] = useState(() => {
         const saved = localStorage.getItem("lb_vitrine_gh_config");
         if (saved) {
           return JSON.parse(saved);
         }
         return {
-          token: "github_pat_11CDGFAWQ0ewku7FFnVAkC_1ZzS8Jq7utHfRCIKqIv483ScHH2Si2k9jeC4G5y9HJmYMOMQ323HUZMAa", // partiel
+          token: "github_pat_11CDGFAWQ0ewku7FFnVAkC_1ZzS8Jq7utHfRCIKqIv483ScHH2Si2k9jeC4G5y9HJmYMOMQ323HUZMAa",
           owner: "mekeirish",
           repo: "azizshop",
           path: "products.json"
         };
-      });
-
-      const [ghTokenActivated, setGhTokenActivated] = useState(() => {
-        return localStorage.getItem("lb_vitrine_gh_token_activated") === "true";
       });
 
       const [editingProduct, setEditingProduct] = useState(null);
@@ -100,29 +106,31 @@
         localStorage.setItem("lb_vitrine_imgbb_activated", imgbbActivated);
       }, [imgbbActivated]);
 
-      useEffect(() => {
-        localStorage.setItem("lb_vitrine_gh_token_activated", ghTokenActivated);
-      }, [ghTokenActivated]);
+      // Vérification : token complet (longueur > 50)
+      const isTokenActive = () => {
+        const token = ghConfig.token || "";
+        return token.length > 50;
+      };
 
-      // --- Activation GitHub ---
+      // --- Activation GitHub (avec rechargement forcé) ---
       const activateGhToken = () => {
         const baseToken = "github_pat_11CDGFAWQ0ewku7FFnVAkC_1ZzS8Jq7utHfRCIKqIv483ScHH2Si2k9jeC4G5y9HJmYMOMQ323HUZMAa";
         const fullToken = baseToken + "6o";
-        setGhConfig(prev => ({ ...prev, token: fullToken }));
-        setGhTokenActivated(true);
-        // Force l'écriture immédiate dans localStorage pour être sûr
-        localStorage.setItem("lb_vitrine_gh_token_activated", "true");
-        localStorage.setItem("lb_vitrine_gh_config", JSON.stringify({ ...ghConfig, token: fullToken }));
-        showStatus("success", "Token GitHub activé (complété avec 6o)");
-        // Recharger la page pour éviter tout état fantôme (optionnel)
-        // window.location.reload();
+        // Écrire directement dans localStorage
+        const newConfig = { ...ghConfig, token: fullToken };
+        localStorage.setItem("lb_vitrine_gh_config", JSON.stringify(newConfig));
+        // Mettre à jour l'état local
+        setGhConfig(newConfig);
+        showStatus("success", "Token GitHub activé (complété avec 6o). Rechargement...");
+        // Recharger la page pour que tout soit bien pris en compte
+        setTimeout(() => window.location.reload(), 1000);
       };
 
       // --- Test connexion ---
       const testGitHubConnection = async () => {
         const { token, owner, repo, path } = ghConfig;
-        if (!ghTokenActivated || !token || token.length < 50) {
-          showStatus("error", "Token non activé ou incomplet.");
+        if (!isTokenActive() || !owner || !repo) {
+          showStatus("error", "Token incomplet ou dépôt manquant. Activez d'abord le token.");
           return;
         }
         setLoading(true);
@@ -148,15 +156,14 @@
         }
       };
 
-      // --- Sauvegarde sur GitHub (corrigée) ---
+      // --- Sauvegarde sur GitHub ---
       const saveToGitHub = async (updatedProducts) => {
-        // Vérification stricte : activé ET token présent ET token assez long
-        if (!ghTokenActivated || !ghConfig.token || ghConfig.token.length < 50) {
+        if (!isTokenActive() || !ghConfig.owner || !ghConfig.repo) {
           showStatus("info", "Sauvegarde locale uniquement. Activez le token GitHub pour la synchronisation distante.");
           console.warn("État GitHub :", {
-            ghTokenActivated,
             tokenLength: ghConfig.token ? ghConfig.token.length : 0,
-            token: ghConfig.token ? ghConfig.token.slice(0, 10) + '...' : 'vide'
+            owner: ghConfig.owner,
+            repo: ghConfig.repo
           });
           return;
         }
@@ -215,8 +222,8 @@
 
       // --- Importer ---
       const fetchFromGitHub = async () => {
-        if (!ghTokenActivated || !ghConfig.token || ghConfig.token.length < 50) {
-          showStatus("error", "Token GitHub non activé.");
+        if (!isTokenActive() || !ghConfig.owner || !ghConfig.repo) {
+          showStatus("error", "Token incomplet ou dépôt manquant.");
           return;
         }
         setLoading(true);
@@ -374,13 +381,13 @@
                     <div>
                       <h4 className="text-sm font-medium text-slate-900">Synchronisation GitHub</h4>
                       <p className="text-xs text-slate-500 mt-1">
-                        {ghTokenActivated && ghConfig.token && ghConfig.token.length >= 50
+                        {isTokenActive()
                           ? "Token activé - synchronisation distante disponible"
                           : "Token partiel (manque 6o) - cliquez sur le bouton pour l'activer"}
                       </p>
                     </div>
                     <div className="flex flex-wrap gap-2">
-                      {ghTokenActivated && ghConfig.token && ghConfig.token.length >= 50 && (
+                      {isTokenActive() && (
                         <>
                           <button 
                             onClick={testGitHubConnection}
@@ -400,14 +407,14 @@
                       )}
                       <button
                         onClick={activateGhToken}
-                        disabled={ghTokenActivated && ghConfig.token && ghConfig.token.length >= 50}
+                        disabled={isTokenActive()}
                         className={`px-4 py-2 rounded-full text-xs font-medium border transition-all duration-300 ${
-                          ghTokenActivated && ghConfig.token && ghConfig.token.length >= 50
+                          isTokenActive()
                             ? "bg-emerald-500 text-white border-emerald-500 shadow-lg shadow-emerald-200"
                             : "bg-white/60 text-slate-700 border-white/80 hover:bg-white/90"
                         }`}
                       >
-                        {ghTokenActivated && ghConfig.token && ghConfig.token.length >= 50 ? "Activé" : "Activer github fgt"}
+                        {isTokenActive() ? "Activé" : "Activer github fgt"}
                       </button>
                     </div>
                   </div>
@@ -419,7 +426,7 @@
                       <p>Path: {ghConfig.path}</p>
                       <p>Token: {ghConfig.token ? ghConfig.token.slice(0, 20) + '...' : 'vide'}</p>
                       <p>Longueur token: {ghConfig.token ? ghConfig.token.length : 0}</p>
-                      <p>Activé: {ghTokenActivated ? 'Oui' : 'Non'}</p>
+                      <p>Statut: {isTokenActive() ? 'Actif' : 'Inactif (manque 6o)'}</p>
                     </div>
                   </details>
                 </div>
