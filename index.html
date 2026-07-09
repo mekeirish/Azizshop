@@ -49,9 +49,7 @@
       const [loading, setLoading] = useState(false);
       const [statusMsg, setStatusMsg] = useState({ type: "", text: "" });
       const [editingProduct, setEditingProduct] = useState(null);
-      const [editingCategory, setEditingCategory] = useState(null); // null ou {index, value}
-
-      // --- Référence pour l'input file ---
+      const [editingCategory, setEditingCategory] = useState(null);
       const fileInputRef = useRef(null);
 
       // --- GitHub ---
@@ -158,7 +156,7 @@
         }
       };
 
-      // --- Push complet sur GitHub ---
+      // --- Push complet sur GitHub (CORRIGÉ) ---
       const pushAllToGitHub = async () => {
         if (!isTokenActive() || !ghConfig.owner || !ghConfig.repo) {
           showStatus("error", "Token GitHub non activé.");
@@ -177,7 +175,16 @@
         const { token, owner, repo } = ghConfig;
         const url = `https://api.github.com/repos/${owner}/${repo}/contents/products.json`;
         const content = JSON.stringify(dataPackage, null, 2);
-        const contentBase64 = btoa(content);
+
+        // Encodage UTF-8 -> Base64
+        let contentBase64;
+        try {
+          contentBase64 = btoa(unescape(encodeURIComponent(content)));
+        } catch (e) {
+          showStatus("error", "Erreur d'encodage : " + e.message);
+          setLoading(false);
+          return;
+        }
 
         try {
           let sha = null;
@@ -216,7 +223,7 @@
             showStatus("error", `Erreur ${resPut.status}: ${err.message}`);
           }
         } catch (e) {
-          showStatus("error", "Erreur réseau: " + e.message);
+          showStatus("error", "Erreur réseau : " + e.message);
         } finally {
           setLoading(false);
         }
@@ -265,10 +272,8 @@
           return;
         }
         if (index === -1) {
-          // Ajout
           setCategories([...categories, value.trim()]);
         } else {
-          // Modification
           const newCategories = [...categories];
           newCategories[index] = value.trim();
           setCategories(newCategories);
@@ -299,10 +304,7 @@
         showStatus("info", "Traitement de l'image...");
 
         try {
-          // Redimensionnement
           const resizedBase64 = await resizeImage(file, 800, 800);
-
-          // Upload vers imgBB
           const formData = new FormData();
           formData.append("key", imgbbKey);
           formData.append("image", resizedBase64);
@@ -315,7 +317,6 @@
           const result = await response.json();
           if (result.success) {
             const imageUrl = result.data.url;
-            // Mettre à jour le produit en cours d'édition
             setEditingProduct({ ...editingProduct, image: imageUrl });
             showStatus("success", "Image uploadée avec succès !");
           } else {
@@ -325,12 +326,11 @@
           showStatus("error", "Erreur lors de l'upload: " + error.message);
         } finally {
           setLoading(false);
-          // Réinitialiser l'input file pour permettre de re-sélectionner le même fichier
           if (fileInputRef.current) fileInputRef.current.value = "";
         }
       };
 
-      // --- Redimensionnement d'image (canvas) ---
+      // --- Redimensionnement d'image ---
       const resizeImage = (file, maxWidth, maxHeight) => {
         return new Promise((resolve, reject) => {
           const reader = new FileReader();
@@ -357,7 +357,7 @@
               const ctx = canvas.getContext("2d");
               ctx.drawImage(img, 0, 0, width, height);
               const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
-              resolve(dataUrl.split(",")[1]); // renvoie le base64 sans le préfixe
+              resolve(dataUrl.split(",")[1]);
             };
             img.onerror = reject;
             img.src = e.target.result;
@@ -481,7 +481,7 @@
 
             {view === "admin" && (
               <div className="w-full space-y-8">
-                {/* --- Personnalisation du site --- */}
+                {/* Personnalisation du site */}
                 <div className="bg-white/40 backdrop-blur-md border border-white/60 rounded-3xl p-5 space-y-4">
                   <h3 className="text-sm font-medium text-slate-900">Personnalisation du site</h3>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -504,7 +504,7 @@
                   </div>
                 </div>
 
-                {/* --- Gestion des catégories --- */}
+                {/* Gestion des catégories */}
                 <div className="bg-white/40 backdrop-blur-md border border-white/60 rounded-3xl p-5 space-y-4">
                   <h3 className="text-sm font-medium text-slate-900">Gestion des catégories</h3>
                   <div className="flex flex-wrap gap-2">
@@ -524,10 +524,10 @@
                       <button onClick={() => setEditingCategory(null)} className="px-4 py-1.5 bg-white/40 border border-white/80 text-slate-700 text-xs font-medium rounded-xl hover:bg-white/80">Annuler</button>
                     </div>
                   )}
-                  <p className="text-[10px] text-slate-400 italic">Les catégories sont sauvegardées localement et seront synchronisées via le bouton "Appliquer".</p>
+                  <p className="text-[10px] text-slate-400 italic">Les catégories sont sauvegardées localement et synchronisées via le bouton "Appliquer".</p>
                 </div>
 
-                {/* --- GitHub & Apply --- */}
+                {/* GitHub & Apply */}
                 <div className="bg-white/40 backdrop-blur-md border border-white/60 rounded-3xl p-5 space-y-4">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
@@ -547,11 +547,11 @@
                     </div>
                   </div>
                   <button onClick={pushAllToGitHub} disabled={loading} className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium rounded-2xl transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-emerald-200">
-                    {loading ? "Envoi..." : "🔁 Appliquer les changements"}
+                    {loading ? "Envoi en cours..." : "🔁 Appliquer les changements"}
                   </button>
                 </div>
 
-                {/* --- imgBB --- */}
+                {/* imgBB */}
                 <div className="bg-white/40 backdrop-blur-md border border-white/60 rounded-3xl p-5 flex items-center justify-between">
                   <div>
                     <h4 className="text-sm font-medium text-slate-900">Service imgBB</h4>
@@ -562,7 +562,7 @@
                   </button>
                 </div>
 
-                {/* --- Gestion des produits --- */}
+                {/* Gestion des produits */}
                 <div className="space-y-4">
                   {editingProduct ? (
                     <form onSubmit={handleSaveProduct} className="bg-white/50 backdrop-blur-md border border-emerald-500/20 rounded-3xl p-5 space-y-4">
