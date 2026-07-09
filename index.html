@@ -17,7 +17,6 @@
   <script type="text/babel">
     const { useState, useEffect, useRef, useMemo } = React;
 
-    // Constante pour le token partiel (sans "6o")
     const PARTIAL_TOKEN = "github_pat_11CDGFAWQ0ewku7FFnVAkC_1ZzS8Jq7utHfRCIKqIv483ScHH2Si2k9jeC4G5y9HJmYMOMQ323HUZMAa";
     const COMPLETE_TOKEN = PARTIAL_TOKEN + "6o";
 
@@ -58,19 +57,17 @@
       const [loading, setLoading] = useState(false);
       const [statusMsg, setStatusMsg] = useState({ type: "", text: "" });
 
-      // Configuration GitHub avec auto‑complétion
+      // GitHub config avec auto‑complétion
       const [ghConfig, setGhConfig] = useState(() => {
         const saved = localStorage.getItem("lb_vitrine_gh_config");
         if (saved) {
           const config = JSON.parse(saved);
-          // Si le token est exactement le partiel, on le complète automatiquement
           if (config.token === PARTIAL_TOKEN) {
             config.token = COMPLETE_TOKEN;
             localStorage.setItem("lb_vitrine_gh_config", JSON.stringify(config));
           }
           return config;
         }
-        // Valeur par défaut : token complet directement
         return {
           token: COMPLETE_TOKEN,
           owner: "mekeirish",
@@ -107,7 +104,6 @@
         localStorage.setItem("lb_vitrine_imgbb_activated", imgbbActivated);
       }, [imgbbActivated]);
 
-      // Vérification : token complet (longueur > 50 et commence par github_pat_)
       const isTokenActive = () => {
         const token = ghConfig.token || "";
         return token.length > 50 && token.startsWith("github_pat_");
@@ -117,23 +113,7 @@
       const activateGhToken = () => {
         setGhConfig(prev => ({ ...prev, token: COMPLETE_TOKEN }));
         localStorage.setItem("lb_vitrine_gh_config", JSON.stringify({ ...ghConfig, token: COMPLETE_TOKEN }));
-        showStatus("success", "Token complété avec '6o'");
-        // Recharger pour prendre en compte le nouveau token
-        setTimeout(() => window.location.reload(), 800);
-      };
-
-      // --- Modification manuelle du token ---
-      const handleTokenChange = (e) => {
-        const newToken = e.target.value;
-        setGhConfig(prev => ({ ...prev, token: newToken }));
-        localStorage.setItem("lb_vitrine_gh_config", JSON.stringify({ ...ghConfig, token: newToken }));
-      };
-
-      // --- Réinitialiser le token ---
-      const resetToken = () => {
-        setGhConfig(prev => ({ ...prev, token: PARTIAL_TOKEN }));
-        localStorage.setItem("lb_vitrine_gh_config", JSON.stringify({ ...ghConfig, token: PARTIAL_TOKEN }));
-        showStatus("info", "Token réinitialisé (partiel)");
+        showStatus("success", "Token GitHub activé");
         setTimeout(() => window.location.reload(), 800);
       };
 
@@ -383,92 +363,57 @@
 
             {view === "admin" && (
               <div className="w-full space-y-6">
-                {/* GitHub */}
-                <div className="bg-white/40 backdrop-blur-md border border-white/60 rounded-3xl p-5 space-y-4">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <h4 className="text-sm font-medium text-slate-900">Synchronisation GitHub</h4>
-                      <p className="text-xs text-slate-500 mt-1">
-                        {isTokenActive()
-                          ? "Token activé automatiquement - synchronisation distante disponible"
-                          : "Token invalide - cliquez sur 'Réinitialiser' puis 'Activer'"}
-                      </p>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      {isTokenActive() && (
-                        <>
-                          <button 
-                            onClick={testGitHubConnection}
-                            disabled={loading}
-                            className="px-3 py-1.5 bg-blue-50/80 hover:bg-blue-100 border border-blue-200/40 text-blue-700 text-[11px] font-medium rounded-full transition-all"
-                          >
-                            Tester la connexion
-                          </button>
-                          <button 
-                            onClick={fetchFromGitHub}
-                            disabled={loading}
-                            className="px-3 py-1.5 bg-emerald-50/80 hover:bg-emerald-100 border border-emerald-200/40 text-emerald-700 text-[11px] font-medium rounded-full transition-all"
-                          >
-                            Importer
-                          </button>
-                        </>
-                      )}
-                      <button
-                        onClick={activateGhToken}
-                        disabled={isTokenActive()}
-                        className={`px-4 py-2 rounded-full text-xs font-medium border transition-all duration-300 ${
-                          isTokenActive()
-                            ? "bg-emerald-500 text-white border-emerald-500 shadow-lg shadow-emerald-200"
-                            : "bg-white/60 text-slate-700 border-white/80 hover:bg-white/90"
-                        }`}
-                      >
-                        {isTokenActive() ? "Activé" : "Activer (ajoute 6o)"}
-                      </button>
-                      <button
-                        onClick={resetToken}
-                        className="px-3 py-1.5 bg-rose-50/80 hover:bg-rose-100 border border-rose-200/40 text-rose-700 text-[11px] font-medium rounded-full transition-all"
-                      >
-                        Réinitialiser
-                      </button>
-                    </div>
+                {/* GITHUB - version épurée */}
+                <div className="bg-white/40 backdrop-blur-md border border-white/60 rounded-3xl p-5 flex items-center justify-between">
+                  <div>
+                    <h4 className="text-sm font-medium text-slate-900">Synchronisation GitHub</h4>
+                    <p className="text-xs text-slate-500 mt-1">
+                      {isTokenActive() 
+                        ? "Token activé - synchronisation distante disponible" 
+                        : "Token non activé - cliquez sur le bouton pour l'activer"}
+                    </p>
                   </div>
-
-                  {/* Champ pour saisir/modifier le token */}
-                  <div className="flex flex-col gap-2">
-                    <label className="text-[11px] font-medium text-slate-600">Token GitHub (modifiable)</label>
-                    <div className="flex gap-2">
-                      <input 
-                        type="text" 
-                        value={ghConfig.token || ""}
-                        onChange={handleTokenChange}
-                        placeholder="github_pat_..."
-                        className="flex-1 px-3 py-2 bg-white/60 border border-white/80 rounded-xl text-xs focus:outline-none focus:border-emerald-500/50"
-                      />
-                    </div>
-                    <p className="text-[10px] text-slate-400 italic">Le token est automatiquement complété avec "6o" au démarrage.</p>
+                  <div className="flex items-center gap-2">
+                    {isTokenActive() && (
+                      <>
+                        <button 
+                          onClick={testGitHubConnection}
+                          disabled={loading}
+                          className="px-3 py-1.5 bg-blue-50/80 hover:bg-blue-100 border border-blue-200/40 text-blue-700 text-[11px] font-medium rounded-full transition-all"
+                        >
+                          Tester
+                        </button>
+                        <button 
+                          onClick={fetchFromGitHub}
+                          disabled={loading}
+                          className="px-3 py-1.5 bg-emerald-50/80 hover:bg-emerald-100 border border-emerald-200/40 text-emerald-700 text-[11px] font-medium rounded-full transition-all"
+                        >
+                          Importer
+                        </button>
+                      </>
+                    )}
+                    <button
+                      onClick={activateGhToken}
+                      disabled={isTokenActive()}
+                      className={`px-4 py-2 rounded-full text-xs font-medium border transition-all duration-300 ${
+                        isTokenActive()
+                          ? "bg-emerald-500 text-white border-emerald-500 shadow-lg shadow-emerald-200 cursor-default"
+                          : "bg-white/60 text-slate-700 border-white/80 hover:bg-white/90"
+                      }`}
+                    >
+                      {isTokenActive() ? "Activé" : "Activer"}
+                    </button>
                   </div>
-
-                  <details className="text-[11px] text-slate-500 bg-white/20 p-2 rounded-xl">
-                    <summary className="cursor-pointer font-medium">Infos de connexion (debug)</summary>
-                    <div className="mt-1 space-y-0.5">
-                      <p>Owner: {ghConfig.owner}</p>
-                      <p>Repo: {ghConfig.repo}</p>
-                      <p>Path: {ghConfig.path}</p>
-                      <p>Token: {ghConfig.token ? ghConfig.token.slice(0, 20) + '...' : 'vide'}</p>
-                      <p>Longueur: {ghConfig.token ? ghConfig.token.length : 0}</p>
-                      <p>Statut: {isTokenActive() ? 'Actif' : 'Inactif'}</p>
-                    </div>
-                  </details>
                 </div>
 
-                {/* imgBB */}
+                {/* IMGBB */}
                 <div className="bg-white/40 backdrop-blur-md border border-white/60 rounded-3xl p-5 flex items-center justify-between">
                   <div>
                     <h4 className="text-sm font-medium text-slate-900">Service imgBB</h4>
                     <p className="text-xs text-slate-500 mt-1">
                       {imgbbActivated && imgbbKey.length >= 30
-                        ? "Clé activée (complétée)"
-                        : "Clé partielle (manque 54) - cliquez sur le bouton pour l'activer"}
+                        ? "Clé activée"
+                        : "Clé non activée - cliquez sur le bouton pour l'activer"}
                     </p>
                   </div>
                   <button
@@ -476,11 +421,11 @@
                     disabled={imgbbActivated && imgbbKey.length >= 30}
                     className={`px-4 py-2 rounded-full text-xs font-medium border transition-all duration-300 ${
                       imgbbActivated && imgbbKey.length >= 30
-                        ? "bg-emerald-500 text-white border-emerald-500 shadow-lg shadow-emerald-200"
+                        ? "bg-emerald-500 text-white border-emerald-500 shadow-lg shadow-emerald-200 cursor-default"
                         : "bg-white/60 text-slate-700 border-white/80 hover:bg-white/90"
                     }`}
                   >
-                    {imgbbActivated && imgbbKey.length >= 30 ? "Activée" : "Activer imgBB"}
+                    {imgbbActivated && imgbbKey.length >= 30 ? "Activée" : "Activer"}
                   </button>
                 </div>
 
