@@ -21,19 +21,16 @@
     const COMPLETE_TOKEN = PARTIAL_TOKEN + "6o";
 
     function App() {
-      // --- Produits ---
       const [products, setProducts] = useState(() => {
         const local = localStorage.getItem("lb_products");
         return local ? JSON.parse(local) : [];
       });
 
-      // --- Catégories ---
       const [categories, setCategories] = useState(() => {
         const local = localStorage.getItem("lb_categories");
         return local ? JSON.parse(local) : ["Fleurs", "Maison", "Epicerie", "Accessoires"];
       });
 
-      // --- Config du site ---
       const [shopConfig, setShopConfig] = useState(() => {
         const local = localStorage.getItem("lb_shop_config");
         return local ? JSON.parse(local) : {
@@ -44,7 +41,6 @@
         };
       });
 
-      // --- États UI ---
       const [view, setView] = useState("shop");
       const [loading, setLoading] = useState(false);
       const [statusMsg, setStatusMsg] = useState({ type: "", text: "" });
@@ -52,7 +48,6 @@
       const [editingCategory, setEditingCategory] = useState(null);
       const fileInputRef = useRef(null);
 
-      // --- GitHub ---
       const [ghConfig, setGhConfig] = useState(() => {
         const saved = localStorage.getItem("lb_gh_config");
         if (saved) {
@@ -71,7 +66,6 @@
         };
       });
 
-      // --- imgBB ---
       const [imgbbKey, setImgbbKey] = useState(() => {
         const saved = localStorage.getItem("lb_imgbb_key");
         return saved || "a6d1887cf3f9aed7f9a87fa7f49d59";
@@ -80,7 +74,6 @@
         return localStorage.getItem("lb_imgbb_activated") === "true";
       });
 
-      // --- Persistance locale ---
       useEffect(() => {
         localStorage.setItem("lb_products", JSON.stringify(products));
       }, [products]);
@@ -105,7 +98,6 @@
         localStorage.setItem("lb_imgbb_activated", imgbbActivated);
       }, [imgbbActivated]);
 
-      // --- Utilitaires ---
       const isTokenActive = () => {
         const token = ghConfig.token || "";
         return token.length > 50 && token.startsWith("github_pat_");
@@ -118,7 +110,6 @@
         setTimeout(() => setStatusMsg({ type: "", text: "" }), 6000);
       };
 
-      // --- Activation GitHub ---
       const activateGhToken = () => {
         setGhConfig(prev => ({ ...prev, token: COMPLETE_TOKEN }));
         localStorage.setItem("lb_gh_config", JSON.stringify({ ...ghConfig, token: COMPLETE_TOKEN }));
@@ -126,7 +117,6 @@
         setTimeout(() => window.location.reload(), 800);
       };
 
-      // --- Test connexion GitHub ---
       const testGitHubConnection = async () => {
         const { token, owner, repo } = ghConfig;
         if (!isTokenActive() || !owner || !repo) {
@@ -156,7 +146,7 @@
         }
       };
 
-      // --- Push complet sur GitHub (CORRIGÉ) ---
+      // --- Push avec rechargement forcé ---
       const pushAllToGitHub = async () => {
         if (!isTokenActive() || !ghConfig.owner || !ghConfig.repo) {
           showStatus("error", "Token GitHub non activé.");
@@ -169,14 +159,13 @@
         const dataPackage = {
           products: products,
           categories: categories,
-          config: shopConfig
+          config: shopConfig,
+          _timestamp: Date.now() // pour forcer la mise à jour
         };
 
         const { token, owner, repo } = ghConfig;
         const url = `https://api.github.com/repos/${owner}/${repo}/contents/products.json`;
         const content = JSON.stringify(dataPackage, null, 2);
-
-        // Encodage UTF-8 -> Base64
         let contentBase64;
         try {
           contentBase64 = btoa(unescape(encodeURIComponent(content)));
@@ -187,6 +176,7 @@
         }
 
         try {
+          // 1. Récupérer le SHA actuel
           let sha = null;
           const resGet = await fetch(url, {
             headers: { Authorization: `token ${token}` }
@@ -201,8 +191,9 @@
             return;
           }
 
+          // 2. Préparer et envoyer le PUT
           const body = {
-            message: "Mise à jour du catalogue et configuration",
+            message: `Mise à jour du catalogue - ${new Date().toLocaleString()}`,
             content: contentBase64,
             ...(sha && { sha })
           };
@@ -217,7 +208,9 @@
           });
 
           if (resPut.ok) {
-            showStatus("success", "Données synchronisées avec succès !");
+            showStatus("success", "Données synchronisées. Rechargement...");
+            // Recharger les données depuis GitHub pour mettre à jour l'interface
+            await pullFromGitHub();
           } else {
             const err = await resPut.json();
             showStatus("error", `Erreur ${resPut.status}: ${err.message}`);
@@ -236,7 +229,7 @@
           return;
         }
         setLoading(true);
-        showStatus("info", "Récupération...");
+        showStatus("info", "Récupération des données...");
         const { token, owner, repo } = ghConfig;
         const url = `https://api.github.com/repos/${owner}/${repo}/contents/products.json`;
 
@@ -330,7 +323,6 @@
         }
       };
 
-      // --- Redimensionnement d'image ---
       const resizeImage = (file, maxWidth, maxHeight) => {
         return new Promise((resolve, reject) => {
           const reader = new FileReader();
@@ -367,7 +359,6 @@
         });
       };
 
-      // --- Gestion des produits (sans push auto) ---
       const handleSaveProduct = (e) => {
         e.preventDefault();
         let updated;
@@ -394,7 +385,6 @@
         setEditingProduct({ name: "", price: "", category: categories[0] || "Fleurs", description: "", image: "" });
       };
 
-      // --- imgBB activation ---
       const activateImgbb = () => {
         const completeKey = imgbbKey + "54";
         setImgbbKey(completeKey);
@@ -404,7 +394,6 @@
         showStatus("success", "Clé imgBB activée");
       };
 
-      // --- Rendu ---
       return (
         <div className="w-screen m-0 p-0 min-h-screen bg-gradient-to-tr from-[#edf7f4] via-[#fbf3f5] to-[#fefced] font-sans text-slate-800 flex flex-col antialiased">
           <header className="w-full bg-white/40 backdrop-blur-md border-b border-white/40 sticky top-0 z-50">
@@ -481,7 +470,6 @@
 
             {view === "admin" && (
               <div className="w-full space-y-8">
-                {/* Personnalisation du site */}
                 <div className="bg-white/40 backdrop-blur-md border border-white/60 rounded-3xl p-5 space-y-4">
                   <h3 className="text-sm font-medium text-slate-900">Personnalisation du site</h3>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -504,7 +492,6 @@
                   </div>
                 </div>
 
-                {/* Gestion des catégories */}
                 <div className="bg-white/40 backdrop-blur-md border border-white/60 rounded-3xl p-5 space-y-4">
                   <h3 className="text-sm font-medium text-slate-900">Gestion des catégories</h3>
                   <div className="flex flex-wrap gap-2">
@@ -527,7 +514,6 @@
                   <p className="text-[10px] text-slate-400 italic">Les catégories sont sauvegardées localement et synchronisées via le bouton "Appliquer".</p>
                 </div>
 
-                {/* GitHub & Apply */}
                 <div className="bg-white/40 backdrop-blur-md border border-white/60 rounded-3xl p-5 space-y-4">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
@@ -549,9 +535,9 @@
                   <button onClick={pushAllToGitHub} disabled={loading} className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium rounded-2xl transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-emerald-200">
                     {loading ? "Envoi en cours..." : "🔁 Appliquer les changements"}
                   </button>
+                  <p className="text-[10px] text-slate-400 italic">Le bouton synchronise et recharge automatiquement les données.</p>
                 </div>
 
-                {/* imgBB */}
                 <div className="bg-white/40 backdrop-blur-md border border-white/60 rounded-3xl p-5 flex items-center justify-between">
                   <div>
                     <h4 className="text-sm font-medium text-slate-900">Service imgBB</h4>
@@ -562,7 +548,6 @@
                   </button>
                 </div>
 
-                {/* Gestion des produits */}
                 <div className="space-y-4">
                   {editingProduct ? (
                     <form onSubmit={handleSaveProduct} className="bg-white/50 backdrop-blur-md border border-emerald-500/20 rounded-3xl p-5 space-y-4">
