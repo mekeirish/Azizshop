@@ -1,10 +1,15 @@
-[
-  {
-    "name": "Korsi",
-    "price": "20",
-    "category": "Fleurs",
-    "description": "",
-    "image": "",
-    "id": "1783625223235"
+{
+  "products": [],
+  "categories": [
+    "Fleurs",
+    "Maison",
+    "Epicerie",
+    "Accessoires"
+  ],
+  "config": {
+    "title": "Aziz Shop",
+    "subtitle": "Collections de Saison",
+    "badge": "Maison Artisanale",
+    "footer": "Aziz Shop — Gestion fluide et légère"
   }
-]
+}
