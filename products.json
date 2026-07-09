@@ -22,5 +22,29 @@
     "category": "Epicerie",
     "description": "Melange biologique de camomille, de boutons de rose et de menthe poivree pour eveiller les sens.",
     "image": "https://images.unsplash.com/photo-1576092768241-dec231879fc3?w=500&auto=format&fit=crop&q=60"
+  },
+  {
+    "name": "Bagera",
+    "price": "23",
+    "category": "Fleurs",
+    "description": "",
+    "image": "",
+    "id": "1783624095490"
+  },
+  {
+    "name": "Sbdv",
+    "price": "20",
+    "category": "Fleurs",
+    "description": "",
+    "image": "",
+    "id": "1783624142992"
+  },
+  {
+    "name": "Bdbd",
+    "price": "565",
+    "category": "Fleurs",
+    "description": "",
+    "image": "",
+    "id": "1783624406126"
   }
 ]
