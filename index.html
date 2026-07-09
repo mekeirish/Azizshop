@@ -11,10 +11,7 @@
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <!-- Babel Standalone -->
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-
-<link rel="manifest" href="manifest.json">
-<meta name="theme-color" content="#4b6cb7">
-<link rel="apple-touch-icon" href="icon.png"></head>
+</head>
 <body>
   <div id="root"></div>
 
@@ -60,14 +57,14 @@
       const [loading, setLoading] = useState(false);
       const [statusMsg, setStatusMsg] = useState({ type: "", text: "" });
 
-      // Configuration GitHub (cachée, mais persistée)
+      // Configuration GitHub (cachée)
       const [ghConfig, setGhConfig] = useState(() => {
         const saved = localStorage.getItem("lb_vitrine_gh_config");
         if (saved) {
           return JSON.parse(saved);
         }
         return {
-          token: "github_pat_11CDGFAWQ0ewku7FFnVAkC_1ZzS8Jq7utHfRCIKqIv483ScHH2Si2k9jeC4G5y9HJmYMOMQ323HUZMAa", // partiel
+          token: "github_pat_11CDGFAWQ0ewku7FFnVAkC_1ZzS8Jq7utHfRCIKqIv483ScHH2Si2k9jeC4G5y9HJmYMOMQ323HUZMAa",
           owner: "mekeirish",
           repo: "azizshop",
           path: "products.json"
@@ -120,11 +117,41 @@
         showStatus("success", "Token GitHub active (complete avec 6o)");
       };
 
-      // --- SYNCHRONISATION GITHUB (utilise les valeurs codées en dur) ---
+      // --- TEST DE CONNEXION GITHUB ---
+      const testGitHubConnection = async () => {
+        const { token, owner, repo, path } = ghConfig;
+        if (!token || !owner || !repo) {
+          showStatus("error", "Token ou dépôt manquant.");
+          return;
+        }
+        setLoading(true);
+        showStatus("info", "Test de connexion...");
+        try {
+          const url = `https://api.github.com/repos/${owner}/${repo}/contents/${path}`;
+          const res = await fetch(url, {
+            headers: { Authorization: `token ${token}` }
+          });
+          if (res.ok) {
+            const data = await res.json();
+            showStatus("success", "Connexion OK - fichier trouvé (SHA: " + data.sha.substring(0, 8) + "...)");
+          } else if (res.status === 404) {
+            showStatus("info", "Connexion OK - le fichier n'existe pas encore, vous pouvez le créer en sauvegardant.");
+          } else {
+            const err = await res.json();
+            showStatus("error", `Erreur ${res.status}: ${err.message}`);
+          }
+        } catch (e) {
+          showStatus("error", "Erreur réseau: " + e.message);
+        } finally {
+          setLoading(false);
+        }
+      };
+
+      // --- SYNCHRONISATION GITHUB (version corrigée) ---
       const saveToGitHub = async (updatedProducts) => {
         const { token, owner, repo, path } = ghConfig;
         if (!token || !owner || !repo) {
-          showStatus("info", "Sauvegarde locale uniquement. Activez le token GitHub pour la synchronisation distante.");
+          showStatus("info", "Sauvegarde locale uniquement. Activez le token GitHub.");
           return;
         }
 
@@ -132,9 +159,11 @@
         showStatus("info", "Synchronisation avec GitHub...");
 
         const url = `https://api.github.com/repos/${owner}/${repo}/contents/${path}`;
-        const contentBase64 = btoa(unescape(encodeURIComponent(JSON.stringify(updatedProducts, null, 2))));
+        const content = JSON.stringify(updatedProducts, null, 2);
+        const contentBase64 = btoa(content);
 
         try {
+          // 1. Récupérer le SHA si le fichier existe
           let sha = null;
           const resGet = await fetch(url, {
             headers: { Authorization: `token ${token}` }
@@ -143,29 +172,38 @@
           if (resGet.ok) {
             const dataGet = await resGet.json();
             sha = dataGet.sha;
+          } else if (resGet.status !== 404) {
+            const errData = await resGet.json();
+            showStatus("error", `Erreur GitHub (${resGet.status}): ${errData.message}`);
+            setLoading(false);
+            return;
           }
 
+          // 2. Préparer le body
+          const body = {
+            message: "Mise à jour du catalogue (Aziz Shop)",
+            content: contentBase64,
+            ...(sha && { sha })
+          };
+
+          // 3. PUT
           const resPut = await fetch(url, {
             method: "PUT",
             headers: {
               Authorization: `token ${token}`,
               "Content-Type": "application/json"
             },
-            body: JSON.stringify({
-              message: "Mise a jour du catalogue produits (LB Reaactor)",
-              content: contentBase64,
-              sha: sha || undefined
-            })
+            body: JSON.stringify(body)
           });
 
           if (resPut.ok) {
-            showStatus("success", "Catalogue synchronise avec succes sur GitHub !");
+            showStatus("success", "Catalogue synchronisé avec succès sur GitHub !");
           } else {
             const errData = await resPut.json();
-            showStatus("error", "Erreur GitHub : " + errData.message);
+            showStatus("error", `Erreur GitHub (${resPut.status}): ${errData.message}`);
           }
         } catch (error) {
-          showStatus("error", "Impossible de contacter l'API GitHub.");
+          showStatus("error", "Erreur réseau : " + error.message);
         } finally {
           setLoading(false);
         }
@@ -175,12 +213,12 @@
       const fetchFromGitHub = async () => {
         const { token, owner, repo, path } = ghConfig;
         if (!token || !owner || !repo) {
-          showStatus("error", "Token GitHub non active.");
+          showStatus("error", "Token GitHub non activé.");
           return;
         }
 
         setLoading(true);
-        showStatus("info", "Recuperation des donnees distantes...");
+        showStatus("info", "Récupération des données distantes...");
         const url = `https://api.github.com/repos/${owner}/${repo}/contents/${path}`;
 
         try {
@@ -190,15 +228,16 @@
 
           if (res.ok) {
             const data = await res.json();
-            const decodedContent = decodeURIComponent(escape(atob(data.content)));
+            const decodedContent = atob(data.content);
             const fetchedProducts = JSON.parse(decodedContent);
             setProducts(fetchedProducts);
-            showStatus("success", "Catalogue local mis a jour depuis GitHub.");
+            showStatus("success", "Catalogue local mis à jour depuis GitHub.");
           } else {
-            showStatus("error", "Fichier introuvable sur GitHub. Creez une premiere sauvegarde pour l'initialiser.");
+            const errData = await res.json();
+            showStatus("error", `Erreur ${res.status}: ${errData.message}`);
           }
         } catch (error) {
-          showStatus("error", "Erreur lors de la recuperation distante.");
+          showStatus("error", "Erreur réseau : " + error.message);
         } finally {
           setLoading(false);
         }
@@ -222,7 +261,7 @@
       };
 
       const handleDeleteProduct = (id) => {
-        if (confirm("Supprimer ce produit definitivement ?")) {
+        if (confirm("Supprimer ce produit définitivement ?")) {
           const updated = products.filter(p => p.id !== id);
           setProducts(updated);
           saveToGitHub(updated);
@@ -238,13 +277,13 @@
         const completeKey = imgbbKey + "54";
         setImgbbKey(completeKey);
         setImgbbActivated(true);
-        showStatus("success", "Clef imgBB activee (completee avec 54)");
+        showStatus("success", "Clef imgBB activée (complétée avec 54)");
       };
 
       // --- UTILS ---
       const showStatus = (type, text) => {
         setStatusMsg({ type, text });
-        setTimeout(() => setStatusMsg({ type: "", text: "" }), 5000);
+        setTimeout(() => setStatusMsg({ type: "", text: "" }), 6000);
       };
 
       return (
@@ -319,7 +358,7 @@
                           <div className="flex justify-between items-center pt-2">
                             <span className="text-lg font-light text-emerald-950">{parseFloat(product.price).toFixed(2)} EUR</span>
                             <button className="px-3 py-1.5 bg-emerald-700/10 hover:bg-emerald-700/20 text-emerald-900 text-xs font-medium rounded-xl border border-emerald-700/10 transition-all">
-                              Decouvrir
+                              Découvrir
                             </button>
                           </div>
                         </div>
@@ -334,38 +373,60 @@
             {view === "admin" && (
               <div className="w-full space-y-6">
                 
-                {/* BLOC GITHUB (uniquement le bouton) */}
-                <div className="bg-white/40 backdrop-blur-md border border-white/60 rounded-3xl p-5 flex items-center justify-between">
-                  <div>
-                    <h4 className="text-sm font-medium text-slate-900">Synchronisation GitHub</h4>
-                    <p className="text-xs text-slate-500 mt-1">
-                      {ghTokenActivated 
-                        ? "Token active - synchronisation distante disponible" 
-                        : "Token partiel (manque 6o) - cliquez sur le bouton pour l'activer"}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    {ghTokenActivated && (
-                      <button 
-                        onClick={fetchFromGitHub}
-                        disabled={loading}
-                        className="text-[11px] text-emerald-800 font-medium hover:underline disabled:opacity-50"
+                {/* BLOC GITHUB */}
+                <div className="bg-white/40 backdrop-blur-md border border-white/60 rounded-3xl p-5 space-y-3">
+                  <div className="flex items-center justify-between flex-wrap gap-3">
+                    <div>
+                      <h4 className="text-sm font-medium text-slate-900">Synchronisation GitHub</h4>
+                      <p className="text-xs text-slate-500 mt-1">
+                        {ghTokenActivated 
+                          ? "Token activé - synchronisation distante disponible" 
+                          : "Token partiel (manque 6o) - cliquez sur le bouton pour l'activer"}
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {ghTokenActivated && (
+                        <>
+                          <button 
+                            onClick={testGitHubConnection}
+                            disabled={loading}
+                            className="px-3 py-1.5 bg-blue-50/80 hover:bg-blue-100 border border-blue-200/40 text-blue-700 text-[11px] font-medium rounded-full transition-all"
+                          >
+                            Tester la connexion
+                          </button>
+                          <button 
+                            onClick={fetchFromGitHub}
+                            disabled={loading}
+                            className="px-3 py-1.5 bg-emerald-50/80 hover:bg-emerald-100 border border-emerald-200/40 text-emerald-700 text-[11px] font-medium rounded-full transition-all"
+                          >
+                            Importer
+                          </button>
+                        </>
+                      )}
+                      <button
+                        onClick={activateGhToken}
+                        disabled={ghTokenActivated}
+                        className={`px-4 py-2 rounded-full text-xs font-medium border transition-all duration-300 ${
+                          ghTokenActivated
+                            ? "bg-emerald-500 text-white border-emerald-500 shadow-lg shadow-emerald-200"
+                            : "bg-white/60 text-slate-700 border-white/80 hover:bg-white/90"
+                        }`}
                       >
-                        Importer depuis GitHub
+                        {ghTokenActivated ? "Activé" : "Activer github fgt"}
                       </button>
-                    )}
-                    <button
-                      onClick={activateGhToken}
-                      disabled={ghTokenActivated}
-                      className={`px-4 py-2 rounded-full text-xs font-medium border transition-all duration-300 ${
-                        ghTokenActivated
-                          ? "bg-emerald-500 text-white border-emerald-500 shadow-lg shadow-emerald-200"
-                          : "bg-white/60 text-slate-700 border-white/80 hover:bg-white/90"
-                      }`}
-                    >
-                      {ghTokenActivated ? "Active" : "Activer github fgt"}
-                    </button>
+                    </div>
                   </div>
+                  {/* Informations techniques (cachées mais affichées pour le debug) */}
+                  <details className="text-[11px] text-slate-500 bg-white/20 p-2 rounded-xl">
+                    <summary className="cursor-pointer font-medium">Infos de connexion (debug)</summary>
+                    <div className="mt-1 space-y-0.5">
+                      <p>Owner: {ghConfig.owner}</p>
+                      <p>Repo: {ghConfig.repo}</p>
+                      <p>Path: {ghConfig.path}</p>
+                      <p>Token: {ghConfig.token ? ghConfig.token.slice(0, 20) + '...' : 'vide'}</p>
+                      <p>Activé: {ghTokenActivated ? 'Oui' : 'Non'}</p>
+                    </div>
+                  </details>
                 </div>
 
                 {/* BLOC IMGBB */}
@@ -374,8 +435,8 @@
                     <h4 className="text-sm font-medium text-slate-900">Service imgBB</h4>
                     <p className="text-xs text-slate-500 mt-1">
                       {imgbbActivated 
-                        ? "Clef activee (completee)" 
-                        : "Clef partielle (manque 54) - cliquez sur le bouton pour l'activer"}
+                        ? "Clé activée (complétée)" 
+                        : "Clé partielle (manque 54) - cliquez sur le bouton pour l'activer"}
                     </p>
                   </div>
                   <button
@@ -387,7 +448,7 @@
                         : "bg-white/60 text-slate-700 border-white/80 hover:bg-white/90"
                     }`}
                   >
-                    {imgbbActivated ? "Active" : "Activer imgBB"}
+                    {imgbbActivated ? "Activée" : "Activer imgBB"}
                   </button>
                 </div>
 
@@ -421,7 +482,7 @@
                           />
                         </div>
                         <div className="space-y-1">
-                          <label className="text-[11px] font-medium text-slate-600 block">Categorie</label>
+                          <label className="text-[11px] font-medium text-slate-600 block">Catégorie</label>
                           <select 
                             value={editingProduct.category}
                             onChange={e => setEditingProduct({...editingProduct, category: e.target.value})}
@@ -490,7 +551,7 @@
                       <thead>
                         <tr className="border-b border-white/40 bg-white/20 text-slate-600 font-medium">
                           <th className="p-4">Produit</th>
-                          <th className="p-4">Categorie</th>
+                          <th className="p-4">Catégorie</th>
                           <th className="p-4">Prix</th>
                           <th className="p-4 text-right">Actions</th>
                         </tr>
@@ -542,7 +603,7 @@
           </main>
 
           <footer className="w-full py-4 text-center text-[10px] text-slate-400 border-t border-white/20 bg-white/10 backdrop-blur-sm">
-            Aziz Shop — Gestion fluide et legere via Fine-Grained Tokens.
+            Aziz Shop — Gestion fluide et légère via Fine-Grained Tokens.
           </footer>
         </div>
       );
@@ -552,7 +613,5 @@
     const root = ReactDOM.createRoot(document.getElementById('root'));
     root.render(<App />);
   </script>
-
-<script>if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js'));}</script>
 </body>
 </html>
