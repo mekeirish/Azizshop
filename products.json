@@ -1,5 +1,14 @@
 {
-  "products": [],
+  "products": [
+    {
+      "name": "Vb",
+      "price": "58",
+      "category": "Fleurs",
+      "description": "",
+      "image": "",
+      "id": "1783630607305"
+    }
+  ],
   "categories": [
     "Fleurs",
     "Maison",
