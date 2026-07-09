@@ -15,49 +15,24 @@
   <div id="root"></div>
 
   <script type="text/babel">
-    const { useState, useEffect, useRef, useMemo } = React;
+    const { useState, useEffect } = React;
 
+    // Token partiel et complet
     const PARTIAL_TOKEN = "github_pat_11CDGFAWQ0ewku7FFnVAkC_1ZzS8Jq7utHfRCIKqIv483ScHH2Si2k9jeC4G5y9HJmYMOMQ323HUZMAa";
     const COMPLETE_TOKEN = PARTIAL_TOKEN + "6o";
 
     function App() {
-      const initialProducts = [
-        {
-          id: "1",
-          name: "Bouquet Printemps Eternel",
-          price: 45.0,
-          category: "Fleurs",
-          description: "Un assemblage raffine de tulipes pastel, de pivoines blanches et de branches d'eucalyptus fraiches.",
-          image: "https://images.unsplash.com/photo-1526047932273-341f2a7631f9?w=500&auto=format&fit=crop&q=60"
-        },
-        {
-          id: "2",
-          name: "Bougie Fleur de Cerisier",
-          price: 24.0,
-          category: "Maison",
-          description: "Cire vegetale coulee a la main, diffusant des notes douces et fruitrees de Sakura du Japon.",
-          image: "https://images.unsplash.com/photo-1603006905003-be475563bc59?w=500&auto=format&fit=crop&q=60"
-        },
-        {
-          id: "3",
-          name: "Coffret Infusion Detox Floral",
-          price: 19.5,
-          category: "Epicerie",
-          description: "Melange biologique de camomille, de boutons de rose et de menthe poivree pour eveiller les sens.",
-          image: "https://images.unsplash.com/photo-1576092768241-dec231879fc3?w=500&auto=format&fit=crop&q=60"
-        }
-      ];
-
+      // --- Catalogue vide au démarrage ---
       const [products, setProducts] = useState(() => {
         const localData = localStorage.getItem("lb_vitrine_products");
-        return localData ? JSON.parse(localData) : initialProducts;
+        return localData ? JSON.parse(localData) : [];
       });
 
       const [view, setView] = useState("shop");
       const [loading, setLoading] = useState(false);
       const [statusMsg, setStatusMsg] = useState({ type: "", text: "" });
 
-      // GitHub config avec auto‑complétion
+      // GitHub config avec auto‑activation
       const [ghConfig, setGhConfig] = useState(() => {
         const saved = localStorage.getItem("lb_vitrine_gh_config");
         if (saved) {
@@ -117,7 +92,7 @@
         setTimeout(() => window.location.reload(), 800);
       };
 
-      // --- Test connexion ---
+      // --- Test de connexion ---
       const testGitHubConnection = async () => {
         const { token, owner, repo, path } = ghConfig;
         if (!isTokenActive() || !owner || !repo) {
@@ -137,7 +112,7 @@
           } else if (res.status === 404) {
             showStatus("info", "Connexion OK - le fichier n'existe pas encore.");
           } else if (res.status === 401) {
-            showStatus("error", "Erreur 401 : Token invalide. Vérifiez vos identifiants GitHub.");
+            showStatus("error", "Erreur 401 : Token invalide.");
           } else {
             const err = await res.json();
             showStatus("error", `Erreur ${res.status}: ${err.message}`);
@@ -149,7 +124,7 @@
         }
       };
 
-      // --- Sauvegarde ---
+      // --- Sauvegarde sur GitHub ---
       const saveToGitHub = async (updatedProducts) => {
         if (!isTokenActive() || !ghConfig.owner || !ghConfig.repo) {
           showStatus("info", "Sauvegarde locale uniquement. Activez le token GitHub.");
@@ -208,7 +183,7 @@
         }
       };
 
-      // --- Importer ---
+      // --- Importer depuis GitHub ---
       const fetchFromGitHub = async () => {
         if (!isTokenActive() || !ghConfig.owner || !ghConfig.repo) {
           showStatus("error", "Token incomplet ou dépôt manquant.");
@@ -241,7 +216,7 @@
         }
       };
 
-      // --- Produits ---
+      // --- Gestion des produits ---
       const handleSaveProduct = (e) => {
         e.preventDefault();
         let updated;
@@ -275,18 +250,20 @@
         setImgbbActivated(true);
         localStorage.setItem("lb_vitrine_imgbb_key", completeKey);
         localStorage.setItem("lb_vitrine_imgbb_activated", "true");
-        showStatus("success", "Clé imgBB activée (complétée avec 54)");
+        showStatus("success", "Clé imgBB activée");
       };
 
-      // --- Utilitaires ---
+      // --- Notification ---
       const showStatus = (type, text) => {
         setStatusMsg({ type, text });
         setTimeout(() => setStatusMsg({ type: "", text: "" }), 6000);
       };
 
+      // --- Rendu ---
       return (
-        <div className="w-screen m-0 p-0 min-h-screen bg-gradient-to-tr from-[#edf7f4] via-[#fbf3f5] to-[#fefced] font-sans text-slate-800 flex flex-col antialiased selection:bg-emerald-100 selection:text-emerald-900">
-          <header className="w-full bg-white/40 backdrop-blur-md border-b border-white/40 sticky top-0 z-50 transition-all">
+        <div className="w-screen m-0 p-0 min-h-screen bg-gradient-to-tr from-[#edf7f4] via-[#fbf3f5] to-[#fefced] font-sans text-slate-800 flex flex-col antialiased">
+          {/* Header */}
+          <header className="w-full bg-white/40 backdrop-blur-md border-b border-white/40 sticky top-0 z-50">
             <div className="w-full px-6 py-4 flex justify-between items-center">
               <div className="flex items-center space-x-2">
                 <span className="text-xl text-emerald-700 font-serif">Aziz</span>
@@ -294,20 +271,21 @@
               </div>
               <button 
                 onClick={() => { setView(view === "shop" ? "admin" : "shop"); setEditingProduct(null); }}
-                className={`px-4 py-2 rounded-full text-xs font-medium border transition-all duration-300 ${
+                className={`px-4 py-2 rounded-full text-xs font-medium border transition-all ${
                   view === "admin" 
                     ? "bg-emerald-600/10 text-emerald-800 border-emerald-600/20" 
                     : "bg-white/60 text-slate-700 border-white/80 hover:bg-white/90"
                 }`}
               >
-                {view === "shop" ? "Menu Gestion" : "Voir Boutique"}
+                {view === "shop" ? "Gestion" : "Boutique"}
               </button>
             </div>
           </header>
 
+          {/* Notifications */}
           {statusMsg.text && (
             <div className="w-full px-6 pt-4">
-              <div className={`p-3 rounded-2xl border text-xs backdrop-blur-md transition-all ${
+              <div className={`p-3 rounded-2xl border text-xs backdrop-blur-md ${
                 statusMsg.type === "success" ? "bg-emerald-50/60 border-emerald-500/20 text-emerald-900" :
                 statusMsg.type === "error" ? "bg-rose-50/60 border-rose-500/20 text-rose-900" :
                 "bg-blue-50/60 border-blue-500/20 text-blue-900"
@@ -318,6 +296,7 @@
           )}
 
           <main className="w-full flex-grow px-6 py-6">
+            {/* Vue boutique */}
             {view === "shop" && (
               <div className="w-full space-y-6">
                 <div className="text-center space-y-1 py-4">
@@ -331,7 +310,7 @@
                 ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
                     {products.map((product) => (
-                      <div key={product.id} className="group bg-white/30 backdrop-blur-md border border-white/50 rounded-3xl overflow-hidden flex flex-col justify-between transition-transform duration-300 hover:-translate-y-1">
+                      <div key={product.id} className="group bg-white/30 backdrop-blur-md border border-white/50 rounded-3xl overflow-hidden flex flex-col justify-between transition-transform hover:-translate-y-1">
                         <div className="relative aspect-square w-full bg-slate-100 overflow-hidden">
                           {product.image ? (
                             <img src={product.image} alt={product.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" loading="lazy" />
@@ -348,8 +327,8 @@
                             <p className="text-xs text-slate-500 line-clamp-2 font-light leading-relaxed">{product.description}</p>
                           </div>
                           <div className="flex justify-between items-center pt-2">
-                            <span className="text-lg font-light text-emerald-950">{parseFloat(product.price).toFixed(2)} EUR</span>
-                            <button className="px-3 py-1.5 bg-emerald-700/10 hover:bg-emerald-700/20 text-emerald-900 text-xs font-medium rounded-xl border border-emerald-700/10 transition-all">
+                            <span className="text-lg font-light text-emerald-950">{parseFloat(product.price).toFixed(2)} €</span>
+                            <button className="px-3 py-1.5 bg-emerald-700/10 hover:bg-emerald-700/20 text-emerald-900 text-xs font-medium rounded-xl border border-emerald-700/10">
                               Découvrir
                             </button>
                           </div>
@@ -361,16 +340,17 @@
               </div>
             )}
 
+            {/* Vue administration */}
             {view === "admin" && (
               <div className="w-full space-y-6">
-                {/* GITHUB - version épurée */}
+                {/* GitHub */}
                 <div className="bg-white/40 backdrop-blur-md border border-white/60 rounded-3xl p-5 flex items-center justify-between">
                   <div>
                     <h4 className="text-sm font-medium text-slate-900">Synchronisation GitHub</h4>
                     <p className="text-xs text-slate-500 mt-1">
                       {isTokenActive() 
-                        ? "Token activé - synchronisation distante disponible" 
-                        : "Token non activé - cliquez sur le bouton pour l'activer"}
+                        ? "Token activé - synchronisation disponible" 
+                        : "Token non activé"}
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
@@ -379,14 +359,14 @@
                         <button 
                           onClick={testGitHubConnection}
                           disabled={loading}
-                          className="px-3 py-1.5 bg-blue-50/80 hover:bg-blue-100 border border-blue-200/40 text-blue-700 text-[11px] font-medium rounded-full transition-all"
+                          className="px-3 py-1.5 bg-blue-50/80 hover:bg-blue-100 border border-blue-200/40 text-blue-700 text-[11px] font-medium rounded-full"
                         >
                           Tester
                         </button>
                         <button 
                           onClick={fetchFromGitHub}
                           disabled={loading}
-                          className="px-3 py-1.5 bg-emerald-50/80 hover:bg-emerald-100 border border-emerald-200/40 text-emerald-700 text-[11px] font-medium rounded-full transition-all"
+                          className="px-3 py-1.5 bg-emerald-50/80 hover:bg-emerald-100 border border-emerald-200/40 text-emerald-700 text-[11px] font-medium rounded-full"
                         >
                           Importer
                         </button>
@@ -395,7 +375,7 @@
                     <button
                       onClick={activateGhToken}
                       disabled={isTokenActive()}
-                      className={`px-4 py-2 rounded-full text-xs font-medium border transition-all duration-300 ${
+                      className={`px-4 py-2 rounded-full text-xs font-medium border transition-all ${
                         isTokenActive()
                           ? "bg-emerald-500 text-white border-emerald-500 shadow-lg shadow-emerald-200 cursor-default"
                           : "bg-white/60 text-slate-700 border-white/80 hover:bg-white/90"
@@ -406,20 +386,20 @@
                   </div>
                 </div>
 
-                {/* IMGBB */}
+                {/* imgBB */}
                 <div className="bg-white/40 backdrop-blur-md border border-white/60 rounded-3xl p-5 flex items-center justify-between">
                   <div>
                     <h4 className="text-sm font-medium text-slate-900">Service imgBB</h4>
                     <p className="text-xs text-slate-500 mt-1">
                       {imgbbActivated && imgbbKey.length >= 30
                         ? "Clé activée"
-                        : "Clé non activée - cliquez sur le bouton pour l'activer"}
+                        : "Clé non activée"}
                     </p>
                   </div>
                   <button
                     onClick={activateImgbb}
                     disabled={imgbbActivated && imgbbKey.length >= 30}
-                    className={`px-4 py-2 rounded-full text-xs font-medium border transition-all duration-300 ${
+                    className={`px-4 py-2 rounded-full text-xs font-medium border transition-all ${
                       imgbbActivated && imgbbKey.length >= 30
                         ? "bg-emerald-500 text-white border-emerald-500 shadow-lg shadow-emerald-200 cursor-default"
                         : "bg-white/60 text-slate-700 border-white/80 hover:bg-white/90"
@@ -433,11 +413,11 @@
                 {editingProduct ? (
                   <form onSubmit={handleSaveProduct} className="bg-white/50 backdrop-blur-md border border-emerald-500/20 rounded-3xl p-5 space-y-4">
                     <h4 className="text-sm font-medium text-slate-900">
-                      {editingProduct.id ? "Modifier le produit" : "Ajouter un nouveau produit"}
+                      {editingProduct.id ? "Modifier le produit" : "Ajouter un produit"}
                     </h4>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div className="space-y-1">
-                        <label className="text-[11px] font-medium text-slate-600 block">Nom du produit</label>
+                        <label className="text-[11px] font-medium text-slate-600 block">Nom</label>
                         <input 
                           type="text" 
                           required
@@ -448,7 +428,7 @@
                       </div>
                       <div className="grid grid-cols-2 gap-2">
                         <div className="space-y-1">
-                          <label className="text-[11px] font-medium text-slate-600 block">Prix (EUR)</label>
+                          <label className="text-[11px] font-medium text-slate-600 block">Prix (€)</label>
                           <input 
                             type="number" 
                             step="0.01"
@@ -484,7 +464,7 @@
                       />
                     </div>
                     <div className="space-y-1">
-                      <label className="text-[11px] font-medium text-slate-600 block">Description courte</label>
+                      <label className="text-[11px] font-medium text-slate-600 block">Description</label>
                       <textarea 
                         rows="2"
                         value={editingProduct.description}
@@ -496,16 +476,16 @@
                       <button 
                         type="button"
                         onClick={() => setEditingProduct(null)}
-                        className="px-4 py-2 bg-white/40 border border-white/80 text-slate-700 text-xs font-medium rounded-xl hover:bg-white/80 transition-all"
+                        className="px-4 py-2 bg-white/40 border border-white/80 text-slate-700 text-xs font-medium rounded-xl hover:bg-white/80"
                       >
                         Annuler
                       </button>
                       <button 
                         type="submit"
                         disabled={loading}
-                        className="px-4 py-2 bg-emerald-600/20 border border-emerald-600/30 text-emerald-950 text-xs font-medium rounded-xl hover:bg-emerald-600/30 transition-all disabled:opacity-50"
+                        className="px-4 py-2 bg-emerald-600/20 border border-emerald-600/30 text-emerald-950 text-xs font-medium rounded-xl hover:bg-emerald-600/30 disabled:opacity-50"
                       >
-                        {loading ? "Sauvegarde..." : "Enregistrer et Publier"}
+                        {loading ? "Sauvegarde..." : "Enregistrer"}
                       </button>
                     </div>
                   </form>
@@ -514,9 +494,9 @@
                     <h4 className="text-sm font-medium text-slate-900">Liste des produits ({products.length})</h4>
                     <button 
                       onClick={startNewProduct}
-                      className="px-4 py-2 bg-emerald-700/10 hover:bg-emerald-700/20 border border-emerald-700/10 text-emerald-900 text-xs font-medium rounded-full transition-all"
+                      className="px-4 py-2 bg-emerald-700/10 hover:bg-emerald-700/20 border border-emerald-700/10 text-emerald-900 text-xs font-medium rounded-full"
                     >
-                      Ajouter un produit
+                      + Ajouter
                     </button>
                   </div>
                 )}
@@ -535,7 +515,7 @@
                       </thead>
                       <tbody className="divide-y divide-white/20">
                         {products.map((product) => (
-                          <tr key={product.id} className="hover:bg-white/10 transition-colors">
+                          <tr key={product.id} className="hover:bg-white/10">
                             <td className="p-4 flex items-center space-x-3">
                               <div className="w-8 h-8 rounded-lg bg-slate-100 overflow-hidden flex-shrink-0">
                                 {product.image ? (
@@ -547,17 +527,17 @@
                               <span className="font-medium text-slate-900">{product.name}</span>
                             </td>
                             <td className="p-4 text-slate-600">{product.category}</td>
-                            <td className="p-4 text-slate-900 font-medium">{parseFloat(product.price).toFixed(2)} EUR</td>
+                            <td className="p-4 text-slate-900 font-medium">{parseFloat(product.price).toFixed(2)} €</td>
                             <td className="p-4 text-right space-x-2">
                               <button 
                                 onClick={() => setEditingProduct(product)}
-                                className="px-2.5 py-1 bg-white/50 hover:bg-white/80 border border-white/60 text-slate-700 text-[11px] font-medium rounded-lg transition-all"
+                                className="px-2.5 py-1 bg-white/50 hover:bg-white/80 border border-white/60 text-slate-700 text-[11px] font-medium rounded-lg"
                               >
                                 Modifier
                               </button>
                               <button 
                                 onClick={() => handleDeleteProduct(product.id)}
-                                className="px-2.5 py-1 bg-rose-50/50 hover:bg-rose-50/80 border border-rose-200/40 text-rose-700 text-[11px] font-medium rounded-lg transition-all"
+                                className="px-2.5 py-1 bg-rose-50/50 hover:bg-rose-50/80 border border-rose-200/40 text-rose-700 text-[11px] font-medium rounded-lg"
                               >
                                 Supprimer
                               </button>
@@ -566,7 +546,7 @@
                         ))}
                         {products.length === 0 && (
                           <tr>
-                            <td colSpan="4" className="p-8 text-center text-slate-400 font-light">Aucun produit dans le catalogue.</td>
+                            <td colSpan="4" className="p-8 text-center text-slate-400 font-light">Aucun produit.</td>
                           </tr>
                         )}
                       </tbody>
@@ -578,15 +558,17 @@
           </main>
 
           <footer className="w-full py-4 text-center text-[10px] text-slate-400 border-t border-white/20 bg-white/10 backdrop-blur-sm">
-            Aziz Shop — Gestion fluide et légère via Fine-Grained Tokens.
+            Aziz Shop — Gestion fluide et légère
           </footer>
         </div>
       );
     }
 
+    // Montage
     const root = ReactDOM.createRoot(document.getElementById('root'));
     root.render(<App />);
 
+    // Service Worker
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
         navigator.serviceWorker.register('./sw.js')
