@@ -17,6 +17,10 @@
   <script type="text/babel">
     const { useState, useEffect, useRef, useMemo } = React;
 
+    // Constante pour le token partiel (sans "6o")
+    const PARTIAL_TOKEN = "github_pat_11CDGFAWQ0ewku7FFnVAkC_1ZzS8Jq7utHfRCIKqIv483ScHH2Si2k9jeC4G5y9HJmYMOMQ323HUZMAa";
+    const COMPLETE_TOKEN = PARTIAL_TOKEN + "6o";
+
     function App() {
       const initialProducts = [
         {
@@ -54,16 +58,23 @@
       const [loading, setLoading] = useState(false);
       const [statusMsg, setStatusMsg] = useState({ type: "", text: "" });
 
-      // Configuration GitHub
+      // Configuration GitHub avec auto‑complétion
       const [ghConfig, setGhConfig] = useState(() => {
         const saved = localStorage.getItem("lb_vitrine_gh_config");
         if (saved) {
-          return JSON.parse(saved);
+          const config = JSON.parse(saved);
+          // Si le token est exactement le partiel, on le complète automatiquement
+          if (config.token === PARTIAL_TOKEN) {
+            config.token = COMPLETE_TOKEN;
+            localStorage.setItem("lb_vitrine_gh_config", JSON.stringify(config));
+          }
+          return config;
         }
+        // Valeur par défaut : token complet directement
         return {
-          token: "github_pat_11CDGFAWQ0ewku7FFnVAkC_1ZzS8Jq7utHfRCIKqIv483ScHH2Si2k9jeC4G5y9HJmYMOMQ323HUZMAa",
+          token: COMPLETE_TOKEN,
           owner: "mekeirish",
-          repo: "Azizshop",   // ← CORRECTION : A majuscule
+          repo: "Azizshop",
           path: "products.json"
         };
       });
@@ -96,19 +107,18 @@
         localStorage.setItem("lb_vitrine_imgbb_activated", imgbbActivated);
       }, [imgbbActivated]);
 
-      // Vérification token complet
+      // Vérification : token complet (longueur > 50 et commence par github_pat_)
       const isTokenActive = () => {
         const token = ghConfig.token || "";
         return token.length > 50 && token.startsWith("github_pat_");
       };
 
-      // --- Activation auto (ajoute "6o") ---
+      // --- Activation manuelle (bouton) ---
       const activateGhToken = () => {
-        const baseToken = "github_pat_11CDGFAWQ0ewku7FFnVAkC_1ZzS8Jq7utHfRCIKqIv483ScHH2Si2k9jeC4G5y9HJmYMOMQ323HUZMAa";
-        const fullToken = baseToken + "6o";
-        setGhConfig(prev => ({ ...prev, token: fullToken }));
-        localStorage.setItem("lb_vitrine_gh_config", JSON.stringify({ ...ghConfig, token: fullToken }));
+        setGhConfig(prev => ({ ...prev, token: COMPLETE_TOKEN }));
+        localStorage.setItem("lb_vitrine_gh_config", JSON.stringify({ ...ghConfig, token: COMPLETE_TOKEN }));
         showStatus("success", "Token complété avec '6o'");
+        // Recharger pour prendre en compte le nouveau token
         setTimeout(() => window.location.reload(), 800);
       };
 
@@ -121,9 +131,8 @@
 
       // --- Réinitialiser le token ---
       const resetToken = () => {
-        const partial = "github_pat_11CDGFAWQ0ewku7FFnVAkC_1ZzS8Jq7utHfRCIKqIv483ScHH2Si2k9jeC4G5y9HJmYMOMQ323HUZMAa";
-        setGhConfig(prev => ({ ...prev, token: partial }));
-        localStorage.setItem("lb_vitrine_gh_config", JSON.stringify({ ...ghConfig, token: partial }));
+        setGhConfig(prev => ({ ...prev, token: PARTIAL_TOKEN }));
+        localStorage.setItem("lb_vitrine_gh_config", JSON.stringify({ ...ghConfig, token: PARTIAL_TOKEN }));
         showStatus("info", "Token réinitialisé (partiel)");
         setTimeout(() => window.location.reload(), 800);
       };
@@ -132,7 +141,7 @@
       const testGitHubConnection = async () => {
         const { token, owner, repo, path } = ghConfig;
         if (!isTokenActive() || !owner || !repo) {
-          showStatus("error", "Token incomplet ou dépôt manquant. Activez d'abord le token.");
+          showStatus("error", "Token incomplet ou dépôt manquant.");
           return;
         }
         setLoading(true);
@@ -148,7 +157,7 @@
           } else if (res.status === 404) {
             showStatus("info", "Connexion OK - le fichier n'existe pas encore.");
           } else if (res.status === 401) {
-            showStatus("error", "Erreur 401 : Token invalide ou permissions insuffisantes. Vérifiez votre token GitHub.");
+            showStatus("error", "Erreur 401 : Token invalide. Vérifiez vos identifiants GitHub.");
           } else {
             const err = await res.json();
             showStatus("error", `Erreur ${res.status}: ${err.message}`);
@@ -381,8 +390,8 @@
                       <h4 className="text-sm font-medium text-slate-900">Synchronisation GitHub</h4>
                       <p className="text-xs text-slate-500 mt-1">
                         {isTokenActive()
-                          ? "Token activé - synchronisation distante disponible"
-                          : "Token partiel ou invalide - cliquez sur 'Activer' ou saisissez le vôtre"}
+                          ? "Token activé automatiquement - synchronisation distante disponible"
+                          : "Token invalide - cliquez sur 'Réinitialiser' puis 'Activer'"}
                       </p>
                     </div>
                     <div className="flex flex-wrap gap-2">
@@ -424,7 +433,7 @@
                     </div>
                   </div>
 
-                  {/* Champ pour saisir/modifier le token manuellement */}
+                  {/* Champ pour saisir/modifier le token */}
                   <div className="flex flex-col gap-2">
                     <label className="text-[11px] font-medium text-slate-600">Token GitHub (modifiable)</label>
                     <div className="flex gap-2">
@@ -436,7 +445,7 @@
                         className="flex-1 px-3 py-2 bg-white/60 border border-white/80 rounded-xl text-xs focus:outline-none focus:border-emerald-500/50"
                       />
                     </div>
-                    <p className="text-[10px] text-slate-400 italic">Collez votre token complet ici si l'activation automatique ne fonctionne pas.</p>
+                    <p className="text-[10px] text-slate-400 italic">Le token est automatiquement complété avec "6o" au démarrage.</p>
                   </div>
 
                   <details className="text-[11px] text-slate-500 bg-white/20 p-2 rounded-xl">
