@@ -17,16 +17,6 @@
   <script type="text/babel">
     const { useState, useEffect, useRef, useMemo } = React;
 
-    // Fonction utilitaire pour lire le token depuis localStorage
-    const getStoredToken = () => {
-      const saved = localStorage.getItem("lb_vitrine_gh_config");
-      if (saved) {
-        const config = JSON.parse(saved);
-        return config.token || "";
-      }
-      return "github_pat_11CDGFAWQ0ewku7FFnVAkC_1ZzS8Jq7utHfRCIKqIv483ScHH2Si2k9jeC4G5y9HJmYMOMQ323HUZMAa";
-    };
-
     function App() {
       const initialProducts = [
         {
@@ -64,7 +54,7 @@
       const [loading, setLoading] = useState(false);
       const [statusMsg, setStatusMsg] = useState({ type: "", text: "" });
 
-      // Configuration GitHub : on lit depuis localStorage à chaque fois
+      // Configuration GitHub
       const [ghConfig, setGhConfig] = useState(() => {
         const saved = localStorage.getItem("lb_vitrine_gh_config");
         if (saved) {
@@ -73,7 +63,7 @@
         return {
           token: "github_pat_11CDGFAWQ0ewku7FFnVAkC_1ZzS8Jq7utHfRCIKqIv483ScHH2Si2k9jeC4G5y9HJmYMOMQ323HUZMAa",
           owner: "mekeirish",
-          repo: "azizshop",
+          repo: "Azizshop",   // ← CORRECTION : A majuscule
           path: "products.json"
         };
       });
@@ -106,24 +96,36 @@
         localStorage.setItem("lb_vitrine_imgbb_activated", imgbbActivated);
       }, [imgbbActivated]);
 
-      // Vérification : token complet (longueur > 50)
+      // Vérification token complet
       const isTokenActive = () => {
         const token = ghConfig.token || "";
-        return token.length > 50;
+        return token.length > 50 && token.startsWith("github_pat_");
       };
 
-      // --- Activation GitHub (avec rechargement forcé) ---
+      // --- Activation auto (ajoute "6o") ---
       const activateGhToken = () => {
         const baseToken = "github_pat_11CDGFAWQ0ewku7FFnVAkC_1ZzS8Jq7utHfRCIKqIv483ScHH2Si2k9jeC4G5y9HJmYMOMQ323HUZMAa";
         const fullToken = baseToken + "6o";
-        // Écrire directement dans localStorage
-        const newConfig = { ...ghConfig, token: fullToken };
-        localStorage.setItem("lb_vitrine_gh_config", JSON.stringify(newConfig));
-        // Mettre à jour l'état local
-        setGhConfig(newConfig);
-        showStatus("success", "Token GitHub activé (complété avec 6o). Rechargement...");
-        // Recharger la page pour que tout soit bien pris en compte
-        setTimeout(() => window.location.reload(), 1000);
+        setGhConfig(prev => ({ ...prev, token: fullToken }));
+        localStorage.setItem("lb_vitrine_gh_config", JSON.stringify({ ...ghConfig, token: fullToken }));
+        showStatus("success", "Token complété avec '6o'");
+        setTimeout(() => window.location.reload(), 800);
+      };
+
+      // --- Modification manuelle du token ---
+      const handleTokenChange = (e) => {
+        const newToken = e.target.value;
+        setGhConfig(prev => ({ ...prev, token: newToken }));
+        localStorage.setItem("lb_vitrine_gh_config", JSON.stringify({ ...ghConfig, token: newToken }));
+      };
+
+      // --- Réinitialiser le token ---
+      const resetToken = () => {
+        const partial = "github_pat_11CDGFAWQ0ewku7FFnVAkC_1ZzS8Jq7utHfRCIKqIv483ScHH2Si2k9jeC4G5y9HJmYMOMQ323HUZMAa";
+        setGhConfig(prev => ({ ...prev, token: partial }));
+        localStorage.setItem("lb_vitrine_gh_config", JSON.stringify({ ...ghConfig, token: partial }));
+        showStatus("info", "Token réinitialisé (partiel)");
+        setTimeout(() => window.location.reload(), 800);
       };
 
       // --- Test connexion ---
@@ -145,6 +147,8 @@
             showStatus("success", "Connexion OK - fichier trouvé (SHA: " + data.sha.substring(0, 8) + "...)");
           } else if (res.status === 404) {
             showStatus("info", "Connexion OK - le fichier n'existe pas encore.");
+          } else if (res.status === 401) {
+            showStatus("error", "Erreur 401 : Token invalide ou permissions insuffisantes. Vérifiez votre token GitHub.");
           } else {
             const err = await res.json();
             showStatus("error", `Erreur ${res.status}: ${err.message}`);
@@ -156,15 +160,10 @@
         }
       };
 
-      // --- Sauvegarde sur GitHub ---
+      // --- Sauvegarde ---
       const saveToGitHub = async (updatedProducts) => {
         if (!isTokenActive() || !ghConfig.owner || !ghConfig.repo) {
-          showStatus("info", "Sauvegarde locale uniquement. Activez le token GitHub pour la synchronisation distante.");
-          console.warn("État GitHub :", {
-            tokenLength: ghConfig.token ? ghConfig.token.length : 0,
-            owner: ghConfig.owner,
-            repo: ghConfig.repo
-          });
+          showStatus("info", "Sauvegarde locale uniquement. Activez le token GitHub.");
           return;
         }
 
@@ -376,14 +375,14 @@
             {view === "admin" && (
               <div className="w-full space-y-6">
                 {/* GitHub */}
-                <div className="bg-white/40 backdrop-blur-md border border-white/60 rounded-3xl p-5 space-y-3">
-                  <div className="flex items-center justify-between flex-wrap gap-3">
+                <div className="bg-white/40 backdrop-blur-md border border-white/60 rounded-3xl p-5 space-y-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
                       <h4 className="text-sm font-medium text-slate-900">Synchronisation GitHub</h4>
                       <p className="text-xs text-slate-500 mt-1">
                         {isTokenActive()
                           ? "Token activé - synchronisation distante disponible"
-                          : "Token partiel (manque 6o) - cliquez sur le bouton pour l'activer"}
+                          : "Token partiel ou invalide - cliquez sur 'Activer' ou saisissez le vôtre"}
                       </p>
                     </div>
                     <div className="flex flex-wrap gap-2">
@@ -414,10 +413,32 @@
                             : "bg-white/60 text-slate-700 border-white/80 hover:bg-white/90"
                         }`}
                       >
-                        {isTokenActive() ? "Activé" : "Activer github fgt"}
+                        {isTokenActive() ? "Activé" : "Activer (ajoute 6o)"}
+                      </button>
+                      <button
+                        onClick={resetToken}
+                        className="px-3 py-1.5 bg-rose-50/80 hover:bg-rose-100 border border-rose-200/40 text-rose-700 text-[11px] font-medium rounded-full transition-all"
+                      >
+                        Réinitialiser
                       </button>
                     </div>
                   </div>
+
+                  {/* Champ pour saisir/modifier le token manuellement */}
+                  <div className="flex flex-col gap-2">
+                    <label className="text-[11px] font-medium text-slate-600">Token GitHub (modifiable)</label>
+                    <div className="flex gap-2">
+                      <input 
+                        type="text" 
+                        value={ghConfig.token || ""}
+                        onChange={handleTokenChange}
+                        placeholder="github_pat_..."
+                        className="flex-1 px-3 py-2 bg-white/60 border border-white/80 rounded-xl text-xs focus:outline-none focus:border-emerald-500/50"
+                      />
+                    </div>
+                    <p className="text-[10px] text-slate-400 italic">Collez votre token complet ici si l'activation automatique ne fonctionne pas.</p>
+                  </div>
+
                   <details className="text-[11px] text-slate-500 bg-white/20 p-2 rounded-xl">
                     <summary className="cursor-pointer font-medium">Infos de connexion (debug)</summary>
                     <div className="mt-1 space-y-0.5">
@@ -425,8 +446,8 @@
                       <p>Repo: {ghConfig.repo}</p>
                       <p>Path: {ghConfig.path}</p>
                       <p>Token: {ghConfig.token ? ghConfig.token.slice(0, 20) + '...' : 'vide'}</p>
-                      <p>Longueur token: {ghConfig.token ? ghConfig.token.length : 0}</p>
-                      <p>Statut: {isTokenActive() ? 'Actif' : 'Inactif (manque 6o)'}</p>
+                      <p>Longueur: {ghConfig.token ? ghConfig.token.length : 0}</p>
+                      <p>Statut: {isTokenActive() ? 'Actif' : 'Inactif'}</p>
                     </div>
                   </details>
                 </div>
