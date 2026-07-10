@@ -46,7 +46,8 @@
         title: "Aziz Shop",
         subtitle: "Collections de Saison",
         badge: "Maison Artisanale",
-        footer: "Aziz Shop — Gestion fluide et légère"
+        footer: "Aziz Shop — Gestion fluide et légère",
+        ntfyTopic: ""  // <-- nouveau champ
       });
 
       // --- Filtres et recherche ---
@@ -66,7 +67,7 @@
       const [installPrompt, setInstallPrompt] = useState(null);
       const [isInstallable, setIsInstallable] = useState(false);
 
-      // --- GitHub (stocké localStorage) ---
+      // --- GitHub ---
       const [ghConfig, setGhConfig] = useState(() => {
         const saved = localStorage.getItem("lb_gh_config");
         if (saved) {
@@ -275,7 +276,6 @@
           } else {
             const err = await resPut.json();
             showStatus("error", `Erreur ${resPut.status}: ${err.message}`);
-            // Retry automatique (jusqu'à 3 fois)
             if (retryCount < 3) {
               showStatus("info", `Nouvelle tentative (${retryCount + 1}/3)...`);
               setTimeout(() => pushToGitHub(retryCount + 1), 2000);
@@ -315,10 +315,7 @@
             if (parsed.products) setProducts(parsed.products);
             if (parsed.categories) setCategories(parsed.categories);
             if (parsed.config) setShopConfig(parsed.config);
-            // Filtrer automatiquement
-            if (parsed.categories && parsed.categories.length > 0) {
-              setSelectedCategory("Tous");
-            }
+            setSelectedCategory("Tous");
             showStatus("success", "Données chargées depuis GitHub.");
           } else if (res.status === 404) {
             const initialData = {
@@ -328,14 +325,14 @@
                 title: "Aziz Shop",
                 subtitle: "Collections de Saison",
                 badge: "Maison Artisanale",
-                footer: "Aziz Shop — Gestion fluide et légère"
+                footer: "Aziz Shop — Gestion fluide et légère",
+                ntfyTopic: ""
               }
             };
             setProducts(initialData.products);
             setCategories(initialData.categories);
             setShopConfig(initialData.config);
             setSelectedCategory("Tous");
-            // Créer le fichier
             const content = JSON.stringify(initialData, null, 2);
             const contentBase64 = btoa(unescape(encodeURIComponent(content)));
             const resPut = await fetch(url, {
@@ -418,6 +415,40 @@
       const handleConfigChange = (key, value) => {
         setShopConfig({ ...shopConfig, [key]: value });
         showStatus("info", "Configuration mise à jour localement.");
+      };
+
+      // --- Envoi de notification ntfy ---
+      const sendNotification = async (product) => {
+        const topic = shopConfig.ntfyTopic.trim();
+        if (!topic) {
+          showStatus("error", "Aucun topic ntfy configuré. Contactez le gérant.");
+          return;
+        }
+
+        if (!isOnline) {
+          showStatus("error", "Pas de connexion internet. Impossible d'envoyer la commande.");
+          return;
+        }
+
+        const message = `🛒 Nouvelle commande\n\nProduit : ${product.name}\nPrix : ${parseFloat(product.price).toFixed(2)} €\nCatégorie : ${product.category}\n\nMerci de votre confiance !`;
+
+        try {
+          const response = await fetch(`https://ntfy.sh/${topic}`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "text/plain"
+            },
+            body: message
+          });
+
+          if (response.ok) {
+            showStatus("success", "Commande envoyée ! Vous serez notifié.");
+          } else {
+            showStatus("error", "Erreur lors de l'envoi de la commande. Réessayez.");
+          }
+        } catch (error) {
+          showStatus("error", "Erreur réseau : " + error.message);
+        }
       };
 
       // --- Upload image ---
@@ -670,8 +701,11 @@
                           </div>
                           <div className="flex justify-between items-center pt-2">
                             <span className="text-lg font-light text-emerald-950">{parseFloat(product.price).toFixed(2)} €</span>
-                            <button className="px-3 py-1.5 bg-emerald-700/10 hover:bg-emerald-700/20 text-emerald-900 text-xs font-medium rounded-xl border border-emerald-700/10 transition-all">
-                              Découvrir
+                            <button
+                              onClick={() => sendNotification(product)}
+                              className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-medium rounded-xl border border-emerald-600/20 transition-all shadow-sm shadow-emerald-200"
+                            >
+                              Commander
                             </button>
                           </div>
                         </div>
@@ -682,7 +716,7 @@
               </div>
             )}
 
-            {/* Vue Admin (inchangée) */}
+            {/* Vue Admin */}
             {view === "admin" && (
               <div className="w-full space-y-8">
                 {/* Personnalisation du site */}
@@ -705,6 +739,22 @@
                       <label className="text-[11px] font-medium text-slate-600 block">Footer</label>
                       <input type="text" value={shopConfig.footer} onChange={e => handleConfigChange('footer', e.target.value)} className="w-full px-3 py-2 bg-white/60 border border-white/80 rounded-xl text-xs focus:outline-none focus:border-emerald-500/50" />
                     </div>
+                  </div>
+                </div>
+
+                {/* Nouveau champ ntfy */}
+                <div className="bg-white/40 backdrop-blur-md border border-white/60 rounded-3xl p-5 space-y-3">
+                  <h3 className="text-sm font-medium text-slate-900">Notifications ntfy</h3>
+                  <div>
+                    <label className="text-[11px] font-medium text-slate-600 block">Topic ntfy (ex: azizshop)</label>
+                    <input
+                      type="text"
+                      value={shopConfig.ntfyTopic}
+                      onChange={e => handleConfigChange('ntfyTopic', e.target.value)}
+                      placeholder="mon-topic"
+                      className="w-full px-3 py-2 bg-white/60 border border-white/80 rounded-xl text-xs focus:outline-none focus:border-emerald-500/50"
+                    />
+                    <p className="text-[10px] text-slate-400 italic mt-1">Les notifications seront envoyées sur https://ntfy.sh/{shopConfig.ntfyTopic || '...'}</p>
                   </div>
                 </div>
 
