@@ -9,10 +9,10 @@
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-  <meta name="theme-color" content="#4b6cb7" />
+  <meta name="theme-color" content="#2d4a3c" />
   <style>
     .skeleton {
-      background: linear-gradient(90deg, #e0e0e0 25%, #f0f0f0 50%, #e0e0e0 75%);
+      background: linear-gradient(90deg, #e0d6c8 25%, #f2ebe0 50%, #e0d6c8 75%);
       background-size: 200% 100%;
       animation: shimmer 1.5s infinite;
     }
@@ -27,6 +27,19 @@
       0%, 100% { transform: scale(1); }
       50% { transform: scale(1.05); }
     }
+    .modal-overlay {
+      background: rgba(30, 40, 35, 0.75);
+      backdrop-filter: blur(8px);
+    }
+    .product-modal .product-card {
+      transition: all 0.3s ease;
+    }
+    .product-modal .product-card:hover {
+      transform: translateY(-4px);
+    }
+    body {
+      background: #f7f2eb;
+    }
   </style>
 </head>
 <body>
@@ -38,8 +51,20 @@
     const PARTIAL_TOKEN = "github_pat_11CDGFAWQ0ewku7FFnVAkC_1ZzS8Jq7utHfRCIKqIv483ScHH2Si2k9jeC4G5y9HJmYMOMQ323HUZMAa";
     const COMPLETE_TOKEN = PARTIAL_TOKEN + "6o";
 
+    // --- Fonction de hachage SHA-256 ---
+    const hashPassword = async (password) => {
+      const encoder = new TextEncoder();
+      const data = encoder.encode(password);
+      const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+      const hashArray = Array.from(new Uint8Array(hashBuffer));
+      return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    };
+
+    // Mot de passe par défaut (sera hashé dynamiquement)
+    const DEFAULT_PASSWORD = "1747";
+
     function App() {
-      // --- Données (mémoire) ---
+      // --- Données ---
       const [products, setProducts] = useState([]);
       const [categories, setCategories] = useState([]);
       const [shopConfig, setShopConfig] = useState({
@@ -47,7 +72,8 @@
         subtitle: "Collections de Saison",
         badge: "Maison Artisanale",
         footer: "Aziz Shop — Gestion fluide et légère",
-        ntfyTopic: ""  // <-- nouveau champ
+        ntfyTopic: "",
+        adminPasswordHash: "" // sera rempli au chargement
       });
 
       // --- Filtres et recherche ---
@@ -66,6 +92,32 @@
       const [isOnline, setIsOnline] = useState(navigator.onLine);
       const [installPrompt, setInstallPrompt] = useState(null);
       const [isInstallable, setIsInstallable] = useState(false);
+
+      // --- Sécurité admin ---
+      const [isAdminUnlocked, setIsAdminUnlocked] = useState(false);
+      const [passwordInput, setPasswordInput] = useState("");
+      const [showLockScreen, setShowLockScreen] = useState(false);
+      const [passwordError, setPasswordError] = useState("");
+
+      // --- Changement de mot de passe ---
+      const [oldPassword, setOldPassword] = useState("");
+      const [newPassword, setNewPassword] = useState("");
+      const [confirmPassword, setConfirmPassword] = useState("");
+      const [passwordChangeMsg, setPasswordChangeMsg] = useState("");
+
+      // --- Modale de commande ---
+      const [isModalOpen, setIsModalOpen] = useState(false);
+      const [selectedProduct, setSelectedProduct] = useState(null);
+      const [orderDetails, setOrderDetails] = useState({
+        name: "",
+        phone: "",
+        address: ""
+      });
+
+      // --- Modale de détail produit ---
+      const [isDetailOpen, setIsDetailOpen] = useState(false);
+      const [detailProduct, setDetailProduct] = useState(null);
+      const [relatedProducts, setRelatedProducts] = useState([]);
 
       // --- GitHub ---
       const [ghConfig, setGhConfig] = useState(() => {
@@ -205,13 +257,12 @@
         }
       };
 
-      // --- Push vers GitHub (avec retry) ---
+      // --- Push vers GitHub ---
       const pushToGitHub = async (retryCount = 0) => {
         if (!isTokenActive() || !ghConfig.owner || !ghConfig.repo) {
           showStatus("error", "Token GitHub non activé.");
           return;
         }
-
         if (!isOnline) {
           showStatus("error", "Pas de connexion internet. Réessayez plus tard.");
           return;
@@ -314,10 +365,18 @@
             const parsed = JSON.parse(decoded);
             if (parsed.products) setProducts(parsed.products);
             if (parsed.categories) setCategories(parsed.categories);
-            if (parsed.config) setShopConfig(parsed.config);
+            if (parsed.config) {
+              // Si le hash admin est vide, on le remplace par le hash de "1747"
+              if (!parsed.config.adminPasswordHash) {
+                parsed.config.adminPasswordHash = await hashPassword(DEFAULT_PASSWORD);
+              }
+              setShopConfig(parsed.config);
+            }
             setSelectedCategory("Tous");
             showStatus("success", "Données chargées depuis GitHub.");
           } else if (res.status === 404) {
+            // Fichier inexistant : créer avec le hash par défaut
+            const defaultHash = await hashPassword(DEFAULT_PASSWORD);
             const initialData = {
               products: [],
               categories: ["Fleurs", "Maison", "Epicerie", "Accessoires"],
@@ -326,7 +385,8 @@
                 subtitle: "Collections de Saison",
                 badge: "Maison Artisanale",
                 footer: "Aziz Shop — Gestion fluide et légère",
-                ntfyTopic: ""
+                ntfyTopic: "",
+                adminPasswordHash: defaultHash
               }
             };
             setProducts(initialData.products);
@@ -417,64 +477,145 @@
         showStatus("info", "Configuration mise à jour localement.");
       };
 
-      // --- Envoi de notification ntfy ---
-      const sendNotification = async (product) => {
+      // --- Gestion du mot de passe ---
+      const handleAdminAccess = async () => {
+        const storedHash = shopConfig.adminPasswordHash;
+        if (!storedHash) {
+          // Aucun hash : on autorise (sécurité désactivée)
+          setIsAdminUnlocked(true);
+          setView("admin");
+          setShowLockScreen(false);
+          return;
+        }
+        const inputHash = await hashPassword(passwordInput);
+        if (inputHash === storedHash) {
+          setIsAdminUnlocked(true);
+          setView("admin");
+          setShowLockScreen(false);
+          setPasswordError("");
+          setPasswordInput("");
+        } else {
+          setPasswordError("Mot de passe incorrect.");
+        }
+      };
+
+      const handleChangePassword = async () => {
+        const oldHash = await hashPassword(oldPassword);
+        if (oldHash !== shopConfig.adminPasswordHash) {
+          setPasswordChangeMsg("Ancien mot de passe incorrect.");
+          return;
+        }
+        if (newPassword !== confirmPassword) {
+          setPasswordChangeMsg("Les nouveaux mots de passe ne correspondent pas.");
+          return;
+        }
+        if (newPassword.length < 4) {
+          setPasswordChangeMsg("Le mot de passe doit faire au moins 4 caractères.");
+          return;
+        }
+        const newHash = await hashPassword(newPassword);
+        setShopConfig({ ...shopConfig, adminPasswordHash: newHash });
+        setPasswordChangeMsg("Mot de passe changé avec succès ! (N'oubliez pas d'appliquer)");
+        setOldPassword("");
+        setNewPassword("");
+        setConfirmPassword("");
+      };
+
+      const resetPasswordToDefault = async () => {
+        const defaultHash = await hashPassword(DEFAULT_PASSWORD);
+        setShopConfig({ ...shopConfig, adminPasswordHash: defaultHash });
+        setPasswordChangeMsg(`Mot de passe réinitialisé à "${DEFAULT_PASSWORD}" (n'oubliez pas d'appliquer)`);
+      };
+
+      // --- Modale de commande ---
+      const openOrderModal = (product) => {
+        setSelectedProduct(product);
+        setOrderDetails({ name: "", phone: "", address: "" });
+        setIsModalOpen(true);
+      };
+
+      const closeOrderModal = () => {
+        setIsModalOpen(false);
+        setSelectedProduct(null);
+        setOrderDetails({ name: "", phone: "", address: "" });
+      };
+
+      const sendOrderNotification = async () => {
+        const { name, phone, address } = orderDetails;
+        if (!name.trim() || !phone.trim() || !address.trim()) {
+          showStatus("error", "Veuillez remplir tous les champs.");
+          return;
+        }
         const topic = shopConfig.ntfyTopic.trim();
         if (!topic) {
-          showStatus("error", "Aucun topic ntfy configuré. Contactez le gérant.");
+          showStatus("error", "Aucun topic ntfy configuré.");
           return;
         }
-
         if (!isOnline) {
-          showStatus("error", "Pas de connexion internet. Impossible d'envoyer la commande.");
+          showStatus("error", "Pas de connexion internet.");
           return;
         }
 
-        const message = `🛒 Nouvelle commande\n\nProduit : ${product.name}\nPrix : ${parseFloat(product.price).toFixed(2)} €\nCatégorie : ${product.category}\n\nMerci de votre confiance !`;
+        const message = `🛒 Nouvelle commande\n\n` +
+          `Produit : ${selectedProduct.name}\n` +
+          `Prix : ${parseFloat(selectedProduct.price).toFixed(2)} DZD\n` +
+          `Catégorie : ${selectedProduct.category}\n\n` +
+          `👤 Client :\n` +
+          `Nom : ${name}\n` +
+          `Téléphone : ${phone}\n` +
+          `Adresse : ${address}\n\n` +
+          `Merci de votre confiance !`;
 
         try {
           const response = await fetch(`https://ntfy.sh/${topic}`, {
             method: "POST",
-            headers: {
-              "Content-Type": "text/plain"
-            },
+            headers: { "Content-Type": "text/plain" },
             body: message
           });
-
           if (response.ok) {
-            showStatus("success", "Commande envoyée ! Vous serez notifié.");
+            showStatus("success", "Commande envoyée !");
+            closeOrderModal();
           } else {
-            showStatus("error", "Erreur lors de l'envoi de la commande. Réessayez.");
+            showStatus("error", "Erreur lors de l'envoi.");
           }
         } catch (error) {
           showStatus("error", "Erreur réseau : " + error.message);
         }
       };
 
+      // --- Modale de détail produit ---
+      const openDetailModal = (product) => {
+        setDetailProduct(product);
+        const related = products.filter(p => p.category === product.category && p.id !== product.id);
+        setRelatedProducts(related);
+        setIsDetailOpen(true);
+      };
+
+      const closeDetailModal = () => {
+        setIsDetailOpen(false);
+        setDetailProduct(null);
+        setRelatedProducts([]);
+      };
+
       // --- Upload image ---
       const handleImageUpload = async (e) => {
         const file = e.target.files[0];
         if (!file) return;
-
         if (!isImgbbReady()) {
           showStatus("error", "Activez d'abord la clé imgBB.");
           return;
         }
-
         setLoading(true);
         showStatus("info", "Traitement de l'image...");
-
         try {
           const resizedBase64 = await resizeImage(file, 800, 800);
           const formData = new FormData();
           formData.append("key", imgbbKey);
           formData.append("image", resizedBase64);
-
           const response = await fetch("https://api.imgbb.com/1/upload", {
             method: "POST",
             body: formData
           });
-
           const result = await response.json();
           if (result.success) {
             const imageUrl = result.data.url;
@@ -500,7 +641,6 @@
               const canvas = document.createElement("canvas");
               let width = img.width;
               let height = img.height;
-
               if (width > height) {
                 if (width > maxWidth) {
                   height = Math.round((height * maxWidth) / width);
@@ -542,7 +682,7 @@
 
       // --- Skeleton Cards ---
       const SkeletonCard = () => (
-        <div className="bg-white/30 backdrop-blur-md border border-white/50 rounded-3xl overflow-hidden">
+        <div className="bg-white/40 backdrop-blur-sm border border-amber-200/30 rounded-3xl overflow-hidden shadow-sm">
           <div className="aspect-square w-full skeleton"></div>
           <div className="p-5 space-y-3">
             <div className="h-4 skeleton rounded w-3/4"></div>
@@ -566,19 +706,447 @@
       }, []);
 
       // --- Rendu ---
+      const renderContent = () => {
+        if (view === "admin" && !isAdminUnlocked) {
+          return (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay">
+              <div className="bg-white/95 backdrop-blur-lg rounded-3xl shadow-2xl max-w-md w-full p-6 border border-amber-200/40">
+                <h3 className="text-lg font-medium text-slate-800 mb-2">Accès administrateur</h3>
+                <p className="text-xs text-slate-500 mb-4">Veuillez saisir le mot de passe pour accéder à la gestion.</p>
+                <div>
+                  <label className="text-[11px] font-medium text-slate-600 block mb-1">Mot de passe</label>
+                  <input
+                    type="password"
+                    value={passwordInput}
+                    onChange={(e) => setPasswordInput(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && handleAdminAccess()}
+                    className="w-full px-3 py-2 bg-white/60 border border-amber-200/50 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/50"
+                    placeholder="••••••••"
+                    autoFocus
+                  />
+                  {passwordError && <p className="text-rose-600 text-xs mt-1">{passwordError}</p>}
+                </div>
+                <div className="flex gap-3 mt-6">
+                  <button
+                    onClick={handleAdminAccess}
+                    className="flex-1 py-2.5 bg-amber-600 hover:bg-amber-700 text-white text-sm font-medium rounded-xl transition-all shadow-sm shadow-amber-600/20"
+                  >
+                    Entrer
+                  </button>
+                  <button
+                    onClick={() => { setView("shop"); setShowLockScreen(false); setPasswordInput(""); setPasswordError(""); }}
+                    className="flex-1 py-2.5 bg-white/60 hover:bg-white/80 border border-amber-200/50 text-slate-700 text-sm font-medium rounded-xl transition-all"
+                  >
+                    Retour
+                  </button>
+                </div>
+              </div>
+            </div>
+          );
+        }
+        return (
+          <>
+            <header className="w-full bg-white/60 backdrop-blur-md border-b border-amber-200/30 sticky top-0 z-40">
+              <div className="w-full px-6 py-4 flex justify-between items-center">
+                <h1 className="text-xl font-semibold tracking-tight text-emerald-900">{shopConfig.title}</h1>
+                <button
+                  onClick={() => {
+                    if (view === "admin") {
+                      setIsAdminUnlocked(false);
+                      setView("shop");
+                    } else {
+                      setShowLockScreen(true);
+                      setView("admin");
+                      setPasswordInput("");
+                      setPasswordError("");
+                    }
+                  }}
+                  className={`px-4 py-2 rounded-full text-xs font-medium border transition-all ${
+                    view === "admin"
+                      ? "bg-amber-600/10 text-amber-800 border-amber-600/20"
+                      : "bg-white/60 text-slate-700 border-amber-200/40 hover:bg-white/90"
+                  }`}
+                >
+                  {view === "admin" ? "Quitter" : "Gestion"}
+                </button>
+              </div>
+            </header>
+
+            {statusMsg.text && (
+              <div className="w-full px-6 pt-4">
+                <div className={`p-3 rounded-2xl border text-xs backdrop-blur-md ${
+                  statusMsg.type === "success" ? "bg-emerald-50/80 border-emerald-300/50 text-emerald-800" :
+                  statusMsg.type === "error" ? "bg-rose-50/80 border-rose-300/50 text-rose-800" :
+                  "bg-amber-50/80 border-amber-300/50 text-amber-800"
+                }`}>
+                  {statusMsg.text}
+                </div>
+              </div>
+            )}
+
+            <main className="w-full flex-grow px-6 py-6">
+              {view === "shop" && (
+                <div className="w-full space-y-6">
+                  <div className="text-center space-y-1 py-4">
+                    <span className="text-xs font-semibold tracking-widest uppercase text-amber-700/70">{shopConfig.badge}</span>
+                    <h2 className="text-3xl font-light tracking-tight text-slate-800">{shopConfig.subtitle}</h2>
+                  </div>
+
+                  <div className="space-y-4">
+                    <div className="relative">
+                      <input
+                        type="text"
+                        placeholder="Rechercher un produit..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="w-full px-4 py-3 pl-10 bg-white/60 backdrop-blur-sm border border-amber-200/50 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/50"
+                      />
+                      <svg className="absolute left-3 top-3.5 w-4 h-4 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                      </svg>
+                    </div>
+
+                    <div className="flex flex-wrap gap-2 overflow-x-auto pb-2">
+                      <button
+                        onClick={() => setSelectedCategory("Tous")}
+                        className={`px-4 py-1.5 rounded-full text-xs font-medium border transition-all whitespace-nowrap ${
+                          selectedCategory === "Tous"
+                            ? "bg-emerald-700 text-white border-emerald-700"
+                            : "bg-white/60 text-slate-700 border-amber-200/40 hover:bg-white/80"
+                        }`}
+                      >
+                        Tous
+                      </button>
+                      {categories.map((cat) => (
+                        <button
+                          key={cat}
+                          onClick={() => setSelectedCategory(cat)}
+                          className={`px-4 py-1.5 rounded-full text-xs font-medium border transition-all whitespace-nowrap ${
+                            selectedCategory === cat
+                              ? "bg-emerald-700 text-white border-emerald-700"
+                              : "bg-white/60 text-slate-700 border-amber-200/40 hover:bg-white/80"
+                          }`}
+                        >
+                          {cat}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {loading ? (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
+                      {[...Array(6)].map((_, i) => <SkeletonCard key={i} />)}
+                    </div>
+                  ) : filteredProducts.length === 0 ? (
+                    <div className="w-full py-20 text-center bg-white/30 backdrop-blur-sm rounded-3xl border border-amber-200/30">
+                      <p className="text-sm text-slate-500">
+                        {products.length === 0 ? "Aucun produit disponible." : "Aucun produit ne correspond à vos critères."}
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
+                      {filteredProducts.map((product) => (
+                        <div key={product.id} className="group bg-white/50 backdrop-blur-sm border border-amber-200/30 rounded-3xl overflow-hidden flex flex-col justify-between transition-all duration-300 hover:-translate-y-1 hover:shadow-xl">
+                          <div
+                            className="relative aspect-square w-full bg-amber-50/30 overflow-hidden cursor-pointer"
+                            onClick={() => openDetailModal(product)}
+                          >
+                            {product.image ? (
+                              <img src={product.image} alt={product.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" loading="lazy" />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center text-amber-300 text-6xl">🖼️</div>
+                            )}
+                            <span className="absolute top-3 left-3 bg-white/80 backdrop-blur-md text-[10px] uppercase tracking-wider font-semibold px-2.5 py-1 rounded-full text-emerald-800 border border-emerald-200/40">
+                              {product.category}
+                            </span>
+                            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
+                              <span className="bg-white/80 text-slate-800 text-xs font-medium px-3 py-1.5 rounded-full backdrop-blur-sm">Voir détails</span>
+                            </div>
+                          </div>
+                          <div className="p-5 flex-grow flex flex-col justify-between space-y-3">
+                            <div className="space-y-1">
+                              <h3 className="text-base font-medium text-slate-800 line-clamp-1">{product.name}</h3>
+                              <p className="text-xs text-slate-500 line-clamp-2 font-light leading-relaxed">{product.description}</p>
+                            </div>
+                            <div className="flex justify-between items-center pt-2">
+                              <span className="text-lg font-light text-emerald-800">{parseFloat(product.price).toFixed(2)} DZD</span>
+                              <button
+                                onClick={() => openOrderModal(product)}
+                                className="px-4 py-1.5 bg-amber-600 hover:bg-amber-700 text-white text-xs font-medium rounded-xl border border-amber-600/20 transition-all shadow-sm shadow-amber-600/20"
+                              >
+                                Commander
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {view === "admin" && isAdminUnlocked && (
+                <div className="w-full space-y-8">
+                  <div className="bg-white/60 backdrop-blur-md border border-amber-200/40 rounded-3xl p-5 space-y-4">
+                    <h3 className="text-sm font-medium text-slate-800">Personnalisation du site</h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-[11px] font-medium text-slate-600 block">Titre</label>
+                        <input type="text" value={shopConfig.title} onChange={e => handleConfigChange('title', e.target.value)} className="w-full px-3 py-2 bg-white/60 border border-amber-200/50 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-amber-500/50" />
+                      </div>
+                      <div>
+                        <label className="text-[11px] font-medium text-slate-600 block">Sous-titre</label>
+                        <input type="text" value={shopConfig.subtitle} onChange={e => handleConfigChange('subtitle', e.target.value)} className="w-full px-3 py-2 bg-white/60 border border-amber-200/50 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-amber-500/50" />
+                      </div>
+                      <div>
+                        <label className="text-[11px] font-medium text-slate-600 block">Badge</label>
+                        <input type="text" value={shopConfig.badge} onChange={e => handleConfigChange('badge', e.target.value)} className="w-full px-3 py-2 bg-white/60 border border-amber-200/50 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-amber-500/50" />
+                      </div>
+                      <div>
+                        <label className="text-[11px] font-medium text-slate-600 block">Footer</label>
+                        <input type="text" value={shopConfig.footer} onChange={e => handleConfigChange('footer', e.target.value)} className="w-full px-3 py-2 bg-white/60 border border-amber-200/50 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-amber-500/50" />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-white/60 backdrop-blur-md border border-amber-200/40 rounded-3xl p-5 space-y-3">
+                    <h3 className="text-sm font-medium text-slate-800">Notifications ntfy</h3>
+                    <div>
+                      <label className="text-[11px] font-medium text-slate-600 block">Topic ntfy</label>
+                      <input
+                        type="text"
+                        value={shopConfig.ntfyTopic}
+                        onChange={e => handleConfigChange('ntfyTopic', e.target.value)}
+                        placeholder="mon-topic"
+                        className="w-full px-3 py-2 bg-white/60 border border-amber-200/50 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-amber-500/50"
+                      />
+                      <p className="text-[10px] text-slate-400 italic mt-1">https://ntfy.sh/{shopConfig.ntfyTopic || '...'}</p>
+                    </div>
+                  </div>
+
+                  {/* Sécurité */}
+                  <div className="bg-white/60 backdrop-blur-md border border-amber-200/40 rounded-3xl p-5 space-y-4">
+                    <h3 className="text-sm font-medium text-slate-800">Sécurité – Changer le mot de passe</h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-[11px] font-medium text-slate-600 block">Ancien mot de passe</label>
+                        <input
+                          type="password"
+                          value={oldPassword}
+                          onChange={(e) => setOldPassword(e.target.value)}
+                          className="w-full px-3 py-2 bg-white/60 border border-amber-200/50 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-amber-500/50"
+                          placeholder="••••••••"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[11px] font-medium text-slate-600 block">Nouveau mot de passe</label>
+                        <input
+                          type="password"
+                          value={newPassword}
+                          onChange={(e) => setNewPassword(e.target.value)}
+                          className="w-full px-3 py-2 bg-white/60 border border-amber-200/50 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-amber-500/50"
+                          placeholder="••••••••"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[11px] font-medium text-slate-600 block">Confirmer nouveau</label>
+                        <input
+                          type="password"
+                          value={confirmPassword}
+                          onChange={(e) => setConfirmPassword(e.target.value)}
+                          className="w-full px-3 py-2 bg-white/60 border border-amber-200/50 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-amber-500/50"
+                          placeholder="••••••••"
+                        />
+                      </div>
+                      <div className="flex flex-col gap-2">
+                        <button
+                          onClick={handleChangePassword}
+                          className="w-full py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-medium rounded-xl transition-all shadow-sm shadow-amber-600/20"
+                        >
+                          Changer le mot de passe
+                        </button>
+                        <button
+                          onClick={resetPasswordToDefault}
+                          className="w-full py-2 bg-rose-100 hover:bg-rose-200 text-rose-700 text-xs font-medium rounded-xl border border-rose-200 transition-all"
+                        >
+                          Réinitialiser à 1747
+                        </button>
+                      </div>
+                    </div>
+                    {passwordChangeMsg && (
+                      <p className={`text-xs ${passwordChangeMsg.includes('succès') ? 'text-emerald-700' : 'text-rose-600'}`}>
+                        {passwordChangeMsg}
+                      </p>
+                    )}
+                    <p className="text-[10px] text-slate-400 italic">N'oubliez pas de cliquer sur "Appliquer" pour sauvegarder le nouveau mot de passe.</p>
+                  </div>
+
+                  <div className="bg-white/60 backdrop-blur-md border border-amber-200/40 rounded-3xl p-5 space-y-4">
+                    <h3 className="text-sm font-medium text-slate-800">Gestion des catégories</h3>
+                    <div className="flex flex-wrap gap-2">
+                      {categories.map((cat, index) => (
+                        <div key={index} className="flex items-center bg-white/80 rounded-full px-3 py-1 border border-amber-200/50">
+                          <span className="text-xs font-medium text-slate-700">{cat}</span>
+                          <button onClick={() => setEditingCategory({ index, value: cat })} className="ml-2 text-amber-600 hover:text-amber-800 text-xs">✏️</button>
+                          <button onClick={() => handleCategoryDelete(index)} className="ml-1 text-rose-500 hover:text-rose-700 text-xs">✖</button>
+                        </div>
+                      ))}
+                      <button onClick={() => setEditingCategory({ index: -1, value: "" })} className="px-3 py-1 bg-amber-100/50 border border-amber-200/40 rounded-full text-xs text-amber-700 hover:bg-amber-100">+ Ajouter</button>
+                    </div>
+                    {editingCategory !== null && (
+                      <div className="flex items-center gap-2 mt-2">
+                        <input type="text" value={editingCategory.value} onChange={e => setEditingCategory({...editingCategory, value: e.target.value})} className="px-3 py-1.5 bg-white/60 border border-amber-200/50 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-amber-500/50 flex-1" placeholder="Nom de la catégorie" />
+                        <button onClick={handleCategorySave} className="px-4 py-1.5 bg-amber-600/20 border border-amber-600/30 text-amber-800 text-xs font-medium rounded-xl hover:bg-amber-600/30">Enregistrer</button>
+                        <button onClick={() => setEditingCategory(null)} className="px-4 py-1.5 bg-white/40 border border-amber-200/50 text-slate-600 text-xs font-medium rounded-xl hover:bg-white/80">Annuler</button>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="bg-white/60 backdrop-blur-md border border-amber-200/40 rounded-3xl p-5 space-y-4">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <h4 className="text-sm font-medium text-slate-800">Synchronisation GitHub</h4>
+                        <p className="text-xs text-slate-500 mt-1">{isTokenActive() ? "Token activé" : "Token non activé"}</p>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {isTokenActive() && (
+                          <button onClick={testGitHubConnection} disabled={loading} className="px-3 py-1.5 bg-amber-50/80 hover:bg-amber-100 border border-amber-200/40 text-amber-700 text-[11px] font-medium rounded-full">Tester</button>
+                        )}
+                        <button onClick={activateGhToken} disabled={isTokenActive()} className={`px-4 py-2 rounded-full text-xs font-medium border transition-all ${isTokenActive() ? "bg-emerald-700 text-white border-emerald-700 shadow-lg shadow-emerald-800/20 cursor-default" : "bg-white/60 text-slate-700 border-amber-200/40 hover:bg-white/90"}`}>
+                          {isTokenActive() ? "Activé" : "Activer"}
+                        </button>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => pushToGitHub()}
+                      disabled={isPushing || loading || !isTokenActive() || !isOnline}
+                      className="w-full py-3 bg-emerald-700 hover:bg-emerald-800 text-white text-sm font-medium rounded-2xl transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-emerald-800/20"
+                    >
+                      {isPushing ? "Envoi en cours..." : "🔁 Appliquer les changements"}
+                    </button>
+                    <p className="text-[10px] text-slate-400 italic">Les modifications sont locales. Cliquez sur "Appliquer" pour les pousser sur GitHub.</p>
+                  </div>
+
+                  <div className="bg-white/60 backdrop-blur-md border border-amber-200/40 rounded-3xl p-5 flex items-center justify-between">
+                    <div>
+                      <h4 className="text-sm font-medium text-slate-800">Service imgBB</h4>
+                      <p className="text-xs text-slate-500 mt-1">{isImgbbReady() ? "Clé activée" : "Clé non activée"}</p>
+                    </div>
+                    <button onClick={activateImgbb} disabled={isImgbbReady()} className={`px-4 py-2 rounded-full text-xs font-medium border transition-all ${isImgbbReady() ? "bg-emerald-700 text-white border-emerald-700 shadow-lg shadow-emerald-800/20 cursor-default" : "bg-white/60 text-slate-700 border-amber-200/40 hover:bg-white/90"}`}>
+                      {isImgbbReady() ? "Activée" : "Activer"}
+                    </button>
+                  </div>
+
+                  <div className="space-y-4">
+                    {editingProduct ? (
+                      <form onSubmit={handleSaveProduct} className="bg-white/60 backdrop-blur-md border border-amber-200/40 rounded-3xl p-5 space-y-4">
+                        <h4 className="text-sm font-medium text-slate-800">{editingProduct.id ? "Modifier le produit" : "Ajouter un produit"}</h4>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <div>
+                            <label className="text-[11px] font-medium text-slate-600 block">Nom</label>
+                            <input type="text" required value={editingProduct.name} onChange={e => setEditingProduct({...editingProduct, name: e.target.value})} className="w-full px-3 py-2 bg-white/60 border border-amber-200/50 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-amber-500/50" />
+                          </div>
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <label className="text-[11px] font-medium text-slate-600 block">Prix (DZD)</label>
+                              <input type="number" step="0.01" required value={editingProduct.price} onChange={e => setEditingProduct({...editingProduct, price: e.target.value})} className="w-full px-3 py-2 bg-white/60 border border-amber-200/50 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-amber-500/50" />
+                            </div>
+                            <div>
+                              <label className="text-[11px] font-medium text-slate-600 block">Catégorie</label>
+                              <select value={editingProduct.category} onChange={e => setEditingProduct({...editingProduct, category: e.target.value})} className="w-full px-3 py-2 bg-white/60 border border-amber-200/50 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-amber-500/50">
+                                {categories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                              </select>
+                            </div>
+                          </div>
+                        </div>
+                        <div>
+                          <label className="text-[11px] font-medium text-slate-600 block">Image</label>
+                          {editingProduct.image && (
+                            <div className="mb-2">
+                              <img src={editingProduct.image} alt="Aperçu" className="w-24 h-24 object-cover rounded-xl border border-amber-200/50" />
+                            </div>
+                          )}
+                          <input type="file" accept="image/*" ref={fileInputRef} onChange={handleImageUpload} className="block w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-medium file:bg-amber-50 file:text-amber-700 hover:file:bg-amber-100" />
+                          <p className="text-[10px] text-slate-400 italic mt-1">Image redimensionnée (800x800) et uploadée sur imgBB.</p>
+                        </div>
+                        <div>
+                          <label className="text-[11px] font-medium text-slate-600 block">Description</label>
+                          <textarea rows="2" value={editingProduct.description} onChange={e => setEditingProduct({...editingProduct, description: e.target.value})} className="w-full px-3 py-2 bg-white/60 border border-amber-200/50 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-amber-500/50 resize-none" />
+                        </div>
+                        <div className="flex justify-end space-x-2 pt-2">
+                          <button type="button" onClick={() => setEditingProduct(null)} className="px-4 py-2 bg-white/40 border border-amber-200/50 text-slate-600 text-xs font-medium rounded-xl hover:bg-white/80">Annuler</button>
+                          <button type="submit" disabled={loading} className="px-4 py-2 bg-amber-600/20 border border-amber-600/30 text-amber-800 text-xs font-medium rounded-xl hover:bg-amber-600/30 disabled:opacity-50">
+                            Enregistrer localement
+                          </button>
+                        </div>
+                      </form>
+                    ) : (
+                      <div className="w-full flex justify-between items-center">
+                        <h4 className="text-sm font-medium text-slate-800">Liste des produits ({products.length})</h4>
+                        <button onClick={startNewProduct} className="px-4 py-2 bg-amber-600/10 hover:bg-amber-600/20 border border-amber-200/40 text-amber-800 text-xs font-medium rounded-full">+ Ajouter</button>
+                      </div>
+                    )}
+
+                    <div className="bg-white/40 backdrop-blur-sm border border-amber-200/30 rounded-3xl overflow-hidden">
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left text-xs border-collapse">
+                          <thead>
+                            <tr className="border-b border-amber-200/30 bg-amber-50/50 text-slate-600 font-medium">
+                              <th className="p-4">Produit</th>
+                              <th className="p-4">Catégorie</th>
+                              <th className="p-4">Prix</th>
+                              <th className="p-4 text-right">Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-amber-200/20">
+                            {products.map((product) => (
+                              <tr key={product.id} className="hover:bg-amber-50/30">
+                                <td className="p-4 flex items-center space-x-3">
+                                  <div className="w-8 h-8 rounded-lg bg-amber-50/50 overflow-hidden flex-shrink-0">
+                                    {product.image ? <img src={product.image} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-[10px] text-amber-300">Img</div>}
+                                  </div>
+                                  <span className="font-medium text-slate-800">{product.name}</span>
+                                </td>
+                                <td className="p-4 text-slate-600">{product.category}</td>
+                                <td className="p-4 text-slate-800 font-medium">{parseFloat(product.price).toFixed(2)} DZD</td>
+                                <td className="p-4 text-right space-x-2">
+                                  <button onClick={() => setEditingProduct(product)} className="px-2.5 py-1 bg-white/50 hover:bg-white/80 border border-amber-200/40 text-slate-700 text-[11px] font-medium rounded-lg">Modifier</button>
+                                  <button onClick={() => handleDeleteProduct(product.id)} className="px-2.5 py-1 bg-rose-50/50 hover:bg-rose-50/80 border border-rose-200/40 text-rose-700 text-[11px] font-medium rounded-lg">Supprimer</button>
+                                </td>
+                              </tr>
+                            ))}
+                            {products.length === 0 && (
+                              <tr><td colSpan="4" className="p-8 text-center text-slate-400 font-light">Aucun produit.</td></tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </main>
+
+            <footer className="w-full py-4 text-center text-[10px] text-slate-500 border-t border-amber-200/30 bg-white/30 backdrop-blur-sm">
+              {shopConfig.footer}
+            </footer>
+          </>
+        );
+      };
+
       return (
-        <div className="w-screen m-0 p-0 min-h-screen bg-gradient-to-tr from-[#edf7f4] via-[#fbf3f5] to-[#fefced] font-sans text-slate-800 flex flex-col antialiased">
+        <div className="w-screen m-0 p-0 min-h-screen bg-gradient-to-br from-[#f7f2eb] via-[#f2ebe0] to-[#e8ddd0] font-sans text-slate-800 flex flex-col antialiased relative">
           {/* Indicateur en ligne/hors ligne */}
-          <div className="fixed top-16 right-4 z-50 flex items-center gap-2 bg-white/80 backdrop-blur-md px-3 py-1.5 rounded-full shadow-lg border border-white/60 text-xs">
-            <span className={`w-2 h-2 rounded-full ${isOnline ? 'bg-emerald-500' : 'bg-rose-500'}`}></span>
-            <span className="text-slate-600">{isOnline ? 'En ligne' : 'Hors ligne'}</span>
+          <div className="fixed top-16 right-4 z-50 flex items-center gap-2 bg-white/90 backdrop-blur-md px-3 py-1.5 rounded-full shadow-lg border border-amber-200/60 text-xs">
+            <span className={`w-2 h-2 rounded-full ${isOnline ? 'bg-emerald-600' : 'bg-rose-600'}`}></span>
+            <span className="text-slate-700">{isOnline ? 'En ligne' : 'Hors ligne'}</span>
           </div>
 
           {/* Bouton d'installation */}
           {isInstallable && (
             <button
               onClick={handleInstall}
-              className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-6 py-3 bg-emerald-600 text-white text-sm font-medium rounded-full shadow-lg shadow-emerald-200 install-btn flex items-center gap-2"
+              className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-6 py-3 bg-emerald-700 hover:bg-emerald-800 text-white text-sm font-medium rounded-full shadow-lg shadow-emerald-800/20 install-btn flex items-center gap-2"
             >
               <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
                 <path d="M10 1a1 1 0 011 1v9.586l2.293-2.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 111.414-1.414L9 11.586V2a1 1 0 011-1zM3 16a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" />
@@ -587,330 +1155,134 @@
             </button>
           )}
 
-          <header className="w-full bg-white/40 backdrop-blur-md border-b border-white/40 sticky top-0 z-40">
-            <div className="w-full px-6 py-4 flex justify-between items-center">
-              <h1 className="text-xl font-semibold tracking-tight text-emerald-950">{shopConfig.title}</h1>
-              <button
-                onClick={() => { setView(view === "shop" ? "admin" : "shop"); setEditingProduct(null); setEditingCategory(null); }}
-                className={`px-4 py-2 rounded-full text-xs font-medium border transition-all ${
-                  view === "admin"
-                    ? "bg-emerald-600/10 text-emerald-800 border-emerald-600/20"
-                    : "bg-white/60 text-slate-700 border-white/80 hover:bg-white/90"
-                }`}
-              >
-                {view === "shop" ? "Gestion" : "Boutique"}
-              </button>
-            </div>
-          </header>
+          {/* MODALE DE DÉTAIL PRODUIT */}
+          {isDetailOpen && detailProduct && (
+            <div className="fixed inset-0 z-50 overflow-y-auto modal-overlay p-4 flex items-center justify-center">
+              <div className="bg-white/95 backdrop-blur-lg rounded-3xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto p-6 border border-amber-200/40 product-modal">
+                <button
+                  onClick={closeDetailModal}
+                  className="float-right text-2xl text-slate-500 hover:text-slate-800 transition-colors"
+                >
+                  ✕
+                </button>
+                <div className="flex flex-col md:flex-row gap-6 mt-2">
+                  <div className="md:w-1/2">
+                    {detailProduct.image ? (
+                      <img
+                        src={detailProduct.image}
+                        alt={detailProduct.name}
+                        className="w-full aspect-square object-cover rounded-2xl shadow-lg border border-amber-100"
+                      />
+                    ) : (
+                      <div className="w-full aspect-square bg-amber-50/60 rounded-2xl flex items-center justify-center text-amber-400 text-6xl">🖼️</div>
+                    )}
+                  </div>
+                  <div className="md:w-1/2 space-y-4">
+                    <h2 className="text-3xl font-semibold text-slate-800">{detailProduct.name}</h2>
+                    <span className="inline-block bg-emerald-100 text-emerald-800 text-xs font-medium px-3 py-1 rounded-full">
+                      {detailProduct.category}
+                    </span>
+                    <p className="text-2xl font-light text-emerald-800">{parseFloat(detailProduct.price).toFixed(2)} DZD</p>
+                    <p className="text-sm text-slate-600 leading-relaxed">{detailProduct.description || "Description non disponible."}</p>
+                    <button
+                      onClick={() => { closeDetailModal(); openOrderModal(detailProduct); }}
+                      className="w-full py-3 bg-amber-600 hover:bg-amber-700 text-white text-sm font-medium rounded-xl transition-all shadow-md shadow-amber-600/20"
+                    >
+                      Commander ce produit
+                    </button>
+                  </div>
+                </div>
 
-          {statusMsg.text && (
-            <div className="w-full px-6 pt-4">
-              <div className={`p-3 rounded-2xl border text-xs backdrop-blur-md ${
-                statusMsg.type === "success" ? "bg-emerald-50/60 border-emerald-500/20 text-emerald-900" :
-                statusMsg.type === "error" ? "bg-rose-50/60 border-rose-500/20 text-rose-900" :
-                "bg-blue-50/60 border-blue-500/20 text-blue-900"
-              }`}>
-                {statusMsg.text}
+                {relatedProducts.length > 0 && (
+                  <div className="mt-8 border-t border-amber-200/40 pt-6">
+                    <h3 className="text-sm font-medium text-slate-700 mb-4">Autres produits dans la même catégorie</h3>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                      {relatedProducts.map((rel) => (
+                        <div
+                          key={rel.id}
+                          onClick={() => { closeDetailModal(); openDetailModal(rel); }}
+                          className="group cursor-pointer bg-white/50 backdrop-blur-sm border border-amber-200/30 rounded-xl overflow-hidden transition-all hover:shadow-md hover:-translate-y-1"
+                        >
+                          <div className="aspect-square w-full bg-amber-50/30 overflow-hidden">
+                            {rel.image ? (
+                              <img src={rel.image} alt={rel.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center text-amber-300 text-4xl">🖼️</div>
+                            )}
+                          </div>
+                          <div className="p-3">
+                            <h4 className="text-xs font-medium text-slate-800 truncate">{rel.name}</h4>
+                            <p className="text-xs text-emerald-700 font-light">{parseFloat(rel.price).toFixed(2)} DZD</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}
 
-          <main className="w-full flex-grow px-6 py-6">
-            {view === "shop" && (
-              <div className="w-full space-y-6">
-                {/* Entête */}
-                <div className="text-center space-y-1 py-4">
-                  <span className="text-xs font-semibold tracking-widest uppercase text-emerald-700/70">{shopConfig.badge}</span>
-                  <h2 className="text-3xl font-light tracking-tight text-slate-900">{shopConfig.subtitle}</h2>
-                </div>
-
-                {/* Barre de recherche et filtres */}
-                <div className="space-y-4">
-                  <div className="relative">
-                    <input
-                      type="text"
-                      placeholder="Rechercher un produit..."
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                      className="w-full px-4 py-3 pl-10 bg-white/60 backdrop-blur-sm border border-white/80 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
-                    />
-                    <svg className="absolute left-3 top-3.5 w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                    </svg>
-                  </div>
-
-                  {/* Filtres par catégorie */}
-                  <div className="flex flex-wrap gap-2 overflow-x-auto pb-2">
-                    <button
-                      onClick={() => setSelectedCategory("Tous")}
-                      className={`px-4 py-1.5 rounded-full text-xs font-medium border transition-all whitespace-nowrap ${
-                        selectedCategory === "Tous"
-                          ? "bg-emerald-600 text-white border-emerald-600"
-                          : "bg-white/60 text-slate-700 border-white/80 hover:bg-white/90"
-                      }`}
-                    >
-                      Tous
-                    </button>
-                    {categories.map((cat) => (
-                      <button
-                        key={cat}
-                        onClick={() => setSelectedCategory(cat)}
-                        className={`px-4 py-1.5 rounded-full text-xs font-medium border transition-all whitespace-nowrap ${
-                          selectedCategory === cat
-                            ? "bg-emerald-600 text-white border-emerald-600"
-                            : "bg-white/60 text-slate-700 border-white/80 hover:bg-white/90"
-                        }`}
-                      >
-                        {cat}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Grille de produits */}
-                {loading ? (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
-                    {[...Array(6)].map((_, i) => <SkeletonCard key={i} />)}
-                  </div>
-                ) : filteredProducts.length === 0 ? (
-                  <div className="w-full py-20 text-center bg-white/20 backdrop-blur-sm rounded-3xl border border-white/40">
-                    <p className="text-sm text-slate-500">
-                      {products.length === 0
-                        ? "Aucun produit disponible."
-                        : "Aucun produit ne correspond à vos critères."}
-                    </p>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
-                    {filteredProducts.map((product) => (
-                      <div key={product.id} className="group bg-white/30 backdrop-blur-md border border-white/50 rounded-3xl overflow-hidden flex flex-col justify-between transition-all duration-300 hover:-translate-y-1 hover:shadow-xl">
-                        <div className="relative aspect-square w-full bg-slate-100 overflow-hidden">
-                          {product.image ? (
-                            <img src={product.image} alt={product.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" loading="lazy" />
-                          ) : (
-                            <div className="w-full h-full flex items-center justify-center text-slate-300 bg-emerald-50/30">Image</div>
-                          )}
-                          <span className="absolute top-3 left-3 bg-white/70 backdrop-blur-md text-[10px] uppercase tracking-wider font-semibold px-2.5 py-1 rounded-full text-slate-700 border border-white/40">
-                            {product.category}
-                          </span>
-                        </div>
-                        <div className="p-5 flex-grow flex flex-col justify-between space-y-3">
-                          <div className="space-y-1">
-                            <h3 className="text-base font-medium text-slate-900 line-clamp-1">{product.name}</h3>
-                            <p className="text-xs text-slate-500 line-clamp-2 font-light leading-relaxed">{product.description}</p>
-                          </div>
-                          <div className="flex justify-between items-center pt-2">
-                            <span className="text-lg font-light text-emerald-950">{parseFloat(product.price).toFixed(2)} €</span>
-                            <button
-                              onClick={() => sendNotification(product)}
-                              className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-medium rounded-xl border border-emerald-600/20 transition-all shadow-sm shadow-emerald-200"
-                            >
-                              Commander
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Vue Admin */}
-            {view === "admin" && (
-              <div className="w-full space-y-8">
-                {/* Personnalisation du site */}
-                <div className="bg-white/40 backdrop-blur-md border border-white/60 rounded-3xl p-5 space-y-4">
-                  <h3 className="text-sm font-medium text-slate-900">Personnalisation du site</h3>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <label className="text-[11px] font-medium text-slate-600 block">Titre</label>
-                      <input type="text" value={shopConfig.title} onChange={e => handleConfigChange('title', e.target.value)} className="w-full px-3 py-2 bg-white/60 border border-white/80 rounded-xl text-xs focus:outline-none focus:border-emerald-500/50" />
-                    </div>
-                    <div>
-                      <label className="text-[11px] font-medium text-slate-600 block">Sous-titre</label>
-                      <input type="text" value={shopConfig.subtitle} onChange={e => handleConfigChange('subtitle', e.target.value)} className="w-full px-3 py-2 bg-white/60 border border-white/80 rounded-xl text-xs focus:outline-none focus:border-emerald-500/50" />
-                    </div>
-                    <div>
-                      <label className="text-[11px] font-medium text-slate-600 block">Badge</label>
-                      <input type="text" value={shopConfig.badge} onChange={e => handleConfigChange('badge', e.target.value)} className="w-full px-3 py-2 bg-white/60 border border-white/80 rounded-xl text-xs focus:outline-none focus:border-emerald-500/50" />
-                    </div>
-                    <div>
-                      <label className="text-[11px] font-medium text-slate-600 block">Footer</label>
-                      <input type="text" value={shopConfig.footer} onChange={e => handleConfigChange('footer', e.target.value)} className="w-full px-3 py-2 bg-white/60 border border-white/80 rounded-xl text-xs focus:outline-none focus:border-emerald-500/50" />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Nouveau champ ntfy */}
-                <div className="bg-white/40 backdrop-blur-md border border-white/60 rounded-3xl p-5 space-y-3">
-                  <h3 className="text-sm font-medium text-slate-900">Notifications ntfy</h3>
+          {/* MODALE DE COMMANDE */}
+          {isModalOpen && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay">
+              <div className="bg-white/95 backdrop-blur-lg rounded-3xl shadow-2xl max-w-md w-full p-6 border border-amber-200/40">
+                <h3 className="text-lg font-medium text-slate-800 mb-2">Passer commande</h3>
+                <p className="text-xs text-slate-500 mb-4">
+                  Pour : <span className="font-medium text-slate-700">{selectedProduct?.name}</span> — {parseFloat(selectedProduct?.price || 0).toFixed(2)} DZD
+                </p>
+                <div className="space-y-3">
                   <div>
-                    <label className="text-[11px] font-medium text-slate-600 block">Topic ntfy (ex: azizshop)</label>
+                    <label className="text-[11px] font-medium text-slate-600 block mb-1">Nom complet</label>
                     <input
                       type="text"
-                      value={shopConfig.ntfyTopic}
-                      onChange={e => handleConfigChange('ntfyTopic', e.target.value)}
-                      placeholder="mon-topic"
-                      className="w-full px-3 py-2 bg-white/60 border border-white/80 rounded-xl text-xs focus:outline-none focus:border-emerald-500/50"
+                      value={orderDetails.name}
+                      onChange={e => setOrderDetails({...orderDetails, name: e.target.value})}
+                      className="w-full px-3 py-2 bg-white/60 border border-amber-200/50 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/50"
+                      placeholder="Votre nom"
                     />
-                    <p className="text-[10px] text-slate-400 italic mt-1">Les notifications seront envoyées sur https://ntfy.sh/{shopConfig.ntfyTopic || '...'}</p>
+                  </div>
+                  <div>
+                    <label className="text-[11px] font-medium text-slate-600 block mb-1">Téléphone</label>
+                    <input
+                      type="tel"
+                      value={orderDetails.phone}
+                      onChange={e => setOrderDetails({...orderDetails, phone: e.target.value})}
+                      className="w-full px-3 py-2 bg-white/60 border border-amber-200/50 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/50"
+                      placeholder="06 12 34 56 78"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11px] font-medium text-slate-600 block mb-1">Adresse de livraison</label>
+                    <textarea
+                      rows="2"
+                      value={orderDetails.address}
+                      onChange={e => setOrderDetails({...orderDetails, address: e.target.value})}
+                      className="w-full px-3 py-2 bg-white/60 border border-amber-200/50 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/50 resize-none"
+                      placeholder="Votre adresse complète"
+                    />
                   </div>
                 </div>
-
-                {/* Gestion catégories */}
-                <div className="bg-white/40 backdrop-blur-md border border-white/60 rounded-3xl p-5 space-y-4">
-                  <h3 className="text-sm font-medium text-slate-900">Gestion des catégories</h3>
-                  <div className="flex flex-wrap gap-2">
-                    {categories.map((cat, index) => (
-                      <div key={index} className="flex items-center bg-white/60 rounded-full px-3 py-1 border border-white/80">
-                        <span className="text-xs font-medium text-slate-700">{cat}</span>
-                        <button onClick={() => setEditingCategory({ index, value: cat })} className="ml-2 text-emerald-600 hover:text-emerald-800 text-xs">✏️</button>
-                        <button onClick={() => handleCategoryDelete(index)} className="ml-1 text-rose-500 hover:text-rose-700 text-xs">✖</button>
-                      </div>
-                    ))}
-                    <button onClick={() => setEditingCategory({ index: -1, value: "" })} className="px-3 py-1 bg-emerald-100/50 border border-emerald-200/40 rounded-full text-xs text-emerald-700 hover:bg-emerald-100">+ Ajouter</button>
-                  </div>
-                  {editingCategory !== null && (
-                    <div className="flex items-center gap-2 mt-2">
-                      <input type="text" value={editingCategory.value} onChange={e => setEditingCategory({...editingCategory, value: e.target.value})} className="px-3 py-1.5 bg-white/60 border border-white/80 rounded-xl text-xs focus:outline-none focus:border-emerald-500/50 flex-1" placeholder="Nom de la catégorie" />
-                      <button onClick={handleCategorySave} className="px-4 py-1.5 bg-emerald-600/20 border border-emerald-600/30 text-emerald-950 text-xs font-medium rounded-xl hover:bg-emerald-600/30">Enregistrer</button>
-                      <button onClick={() => setEditingCategory(null)} className="px-4 py-1.5 bg-white/40 border border-white/80 text-slate-700 text-xs font-medium rounded-xl hover:bg-white/80">Annuler</button>
-                    </div>
-                  )}
-                </div>
-
-                {/* GitHub & Apply */}
-                <div className="bg-white/40 backdrop-blur-md border border-white/60 rounded-3xl p-5 space-y-4">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <h4 className="text-sm font-medium text-slate-900">Synchronisation GitHub</h4>
-                      <p className="text-xs text-slate-500 mt-1">{isTokenActive() ? "Token activé" : "Token non activé"}</p>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      {isTokenActive() && (
-                        <button onClick={testGitHubConnection} disabled={loading} className="px-3 py-1.5 bg-blue-50/80 hover:bg-blue-100 border border-blue-200/40 text-blue-700 text-[11px] font-medium rounded-full">Tester</button>
-                      )}
-                      <button onClick={activateGhToken} disabled={isTokenActive()} className={`px-4 py-2 rounded-full text-xs font-medium border transition-all ${isTokenActive() ? "bg-emerald-500 text-white border-emerald-500 shadow-lg shadow-emerald-200 cursor-default" : "bg-white/60 text-slate-700 border-white/80 hover:bg-white/90"}`}>
-                        {isTokenActive() ? "Activé" : "Activer"}
-                      </button>
-                    </div>
-                  </div>
+                <div className="flex gap-3 mt-6">
                   <button
-                    onClick={() => pushToGitHub()}
-                    disabled={isPushing || loading || !isTokenActive() || !isOnline}
-                    className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium rounded-2xl transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-emerald-200"
+                    onClick={sendOrderNotification}
+                    className="flex-1 py-2.5 bg-amber-600 hover:bg-amber-700 text-white text-sm font-medium rounded-xl transition-all shadow-sm shadow-amber-600/20"
                   >
-                    {isPushing ? "Envoi en cours..." : "🔁 Appliquer les changements"}
+                    Envoyer
                   </button>
-                  <p className="text-[10px] text-slate-400 italic">Les modifications sont locales. Cliquez sur "Appliquer" pour les pousser sur GitHub.</p>
-                </div>
-
-                {/* imgBB */}
-                <div className="bg-white/40 backdrop-blur-md border border-white/60 rounded-3xl p-5 flex items-center justify-between">
-                  <div>
-                    <h4 className="text-sm font-medium text-slate-900">Service imgBB</h4>
-                    <p className="text-xs text-slate-500 mt-1">{isImgbbReady() ? "Clé activée" : "Clé non activée"}</p>
-                  </div>
-                  <button onClick={activateImgbb} disabled={isImgbbReady()} className={`px-4 py-2 rounded-full text-xs font-medium border transition-all ${isImgbbReady() ? "bg-emerald-500 text-white border-emerald-500 shadow-lg shadow-emerald-200 cursor-default" : "bg-white/60 text-slate-700 border-white/80 hover:bg-white/90"}`}>
-                    {isImgbbReady() ? "Activée" : "Activer"}
+                  <button
+                    onClick={closeOrderModal}
+                    className="flex-1 py-2.5 bg-white/60 hover:bg-white/80 border border-amber-200/50 text-slate-700 text-sm font-medium rounded-xl transition-all"
+                  >
+                    Annuler
                   </button>
-                </div>
-
-                {/* Gestion produits */}
-                <div className="space-y-4">
-                  {editingProduct ? (
-                    <form onSubmit={handleSaveProduct} className="bg-white/50 backdrop-blur-md border border-emerald-500/20 rounded-3xl p-5 space-y-4">
-                      <h4 className="text-sm font-medium text-slate-900">{editingProduct.id ? "Modifier le produit" : "Ajouter un produit"}</h4>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div>
-                          <label className="text-[11px] font-medium text-slate-600 block">Nom</label>
-                          <input type="text" required value={editingProduct.name} onChange={e => setEditingProduct({...editingProduct, name: e.target.value})} className="w-full px-3 py-2 bg-white/60 border border-white/80 rounded-xl text-xs focus:outline-none focus:border-emerald-500/50" />
-                        </div>
-                        <div className="grid grid-cols-2 gap-2">
-                          <div>
-                            <label className="text-[11px] font-medium text-slate-600 block">Prix (€)</label>
-                            <input type="number" step="0.01" required value={editingProduct.price} onChange={e => setEditingProduct({...editingProduct, price: e.target.value})} className="w-full px-3 py-2 bg-white/60 border border-white/80 rounded-xl text-xs focus:outline-none focus:border-emerald-500/50" />
-                          </div>
-                          <div>
-                            <label className="text-[11px] font-medium text-slate-600 block">Catégorie</label>
-                            <select value={editingProduct.category} onChange={e => setEditingProduct({...editingProduct, category: e.target.value})} className="w-full px-3 py-2 bg-white/60 border border-white/80 rounded-xl text-xs focus:outline-none focus:border-emerald-500/50">
-                              {categories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
-                            </select>
-                          </div>
-                        </div>
-                      </div>
-                      <div>
-                        <label className="text-[11px] font-medium text-slate-600 block">Image</label>
-                        {editingProduct.image && (
-                          <div className="mb-2">
-                            <img src={editingProduct.image} alt="Aperçu" className="w-24 h-24 object-cover rounded-xl border border-white/60" />
-                          </div>
-                        )}
-                        <input type="file" accept="image/*" ref={fileInputRef} onChange={handleImageUpload} className="block w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-medium file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100" />
-                        <p className="text-[10px] text-slate-400 italic mt-1">Image redimensionnée (800x800) et uploadée sur imgBB.</p>
-                      </div>
-                      <div>
-                        <label className="text-[11px] font-medium text-slate-600 block">Description</label>
-                        <textarea rows="2" value={editingProduct.description} onChange={e => setEditingProduct({...editingProduct, description: e.target.value})} className="w-full px-3 py-2 bg-white/60 border border-white/80 rounded-xl text-xs focus:outline-none focus:border-emerald-500/50 resize-none" />
-                      </div>
-                      <div className="flex justify-end space-x-2 pt-2">
-                        <button type="button" onClick={() => setEditingProduct(null)} className="px-4 py-2 bg-white/40 border border-white/80 text-slate-700 text-xs font-medium rounded-xl hover:bg-white/80">Annuler</button>
-                        <button type="submit" disabled={loading} className="px-4 py-2 bg-emerald-600/20 border border-emerald-600/30 text-emerald-950 text-xs font-medium rounded-xl hover:bg-emerald-600/30 disabled:opacity-50">
-                          Enregistrer localement
-                        </button>
-                      </div>
-                    </form>
-                  ) : (
-                    <div className="w-full flex justify-between items-center">
-                      <h4 className="text-sm font-medium text-slate-900">Liste des produits ({products.length})</h4>
-                      <button onClick={startNewProduct} className="px-4 py-2 bg-emerald-700/10 hover:bg-emerald-700/20 border border-emerald-700/10 text-emerald-900 text-xs font-medium rounded-full">+ Ajouter</button>
-                    </div>
-                  )}
-
-                  <div className="bg-white/30 backdrop-blur-md border border-white/50 rounded-3xl overflow-hidden">
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-left text-xs border-collapse">
-                        <thead>
-                          <tr className="border-b border-white/40 bg-white/20 text-slate-600 font-medium">
-                            <th className="p-4">Produit</th>
-                            <th className="p-4">Catégorie</th>
-                            <th className="p-4">Prix</th>
-                            <th className="p-4 text-right">Actions</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-white/20">
-                          {products.map((product) => (
-                            <tr key={product.id} className="hover:bg-white/10">
-                              <td className="p-4 flex items-center space-x-3">
-                                <div className="w-8 h-8 rounded-lg bg-slate-100 overflow-hidden flex-shrink-0">
-                                  {product.image ? <img src={product.image} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-[10px]">Img</div>}
-                                </div>
-                                <span className="font-medium text-slate-900">{product.name}</span>
-                              </td>
-                              <td className="p-4 text-slate-600">{product.category}</td>
-                              <td className="p-4 text-slate-900 font-medium">{parseFloat(product.price).toFixed(2)} €</td>
-                              <td className="p-4 text-right space-x-2">
-                                <button onClick={() => setEditingProduct(product)} className="px-2.5 py-1 bg-white/50 hover:bg-white/80 border border-white/60 text-slate-700 text-[11px] font-medium rounded-lg">Modifier</button>
-                                <button onClick={() => handleDeleteProduct(product.id)} className="px-2.5 py-1 bg-rose-50/50 hover:bg-rose-50/80 border border-rose-200/40 text-rose-700 text-[11px] font-medium rounded-lg">Supprimer</button>
-                              </td>
-                            </tr>
-                          ))}
-                          {products.length === 0 && (
-                            <tr><td colSpan="4" className="p-8 text-center text-slate-400 font-light">Aucun produit.</td></tr>
-                          )}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
                 </div>
               </div>
-            )}
-          </main>
+            </div>
+          )}
 
-          <footer className="w-full py-4 text-center text-[10px] text-slate-400 border-t border-white/20 bg-white/10 backdrop-blur-sm">
-            {shopConfig.footer}
-          </footer>
+          {/* Contenu principal */}
+          {renderContent()}
         </div>
       );
     }
