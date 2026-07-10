@@ -1,14 +1,6 @@
 {
   "products": [
     {
-      "name": "Bc",
-      "price": "55",
-      "category": "Fleurs",
-      "description": "",
-      "image": "",
-      "id": "1783631062267"
-    },
-    {
       "name": "Jdvd",
       "price": "50",
       "category": "Pains",
