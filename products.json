@@ -33,7 +33,7 @@
       "id": "1783696684103"
     },
     {
-      "name": "SurvÃÂÃÂÃÂÃÂÃÂÃÂÃÂÃÂªtement Caba",
+      "name": "Survetement  caba",
       "price": "3000",
       "category": "Survetement",
       "description": "",
@@ -41,12 +41,12 @@
       "id": "1783696721711"
     },
     {
-      "name": "Survêtement ",
-      "price": "12",
+      "name": "Pantalon Caba 100%",
+      "price": "3500",
       "category": "CaBa",
       "description": "",
-      "image": "https://i.ibb.co/xKgTqKjN/b78b6c203fc6.jpg",
-      "id": "1783699388833"
+      "image": "",
+      "id": "1783699615784"
     }
   ],
   "categories": [
