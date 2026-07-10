@@ -47,6 +47,14 @@
       "description": "",
       "image": "",
       "id": "1783694541900"
+    },
+    {
+      "name": "Cart graphique ",
+      "price": "20000",
+      "category": "Accessoires",
+      "description": "",
+      "image": "https://i.ibb.co/6J7XFZJD/67d1465add4b.jpg",
+      "id": "1783695042683"
     }
   ],
   "categories": [
