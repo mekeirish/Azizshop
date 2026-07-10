@@ -314,7 +314,7 @@
         }
       };
 
-      // --- pushToGitHub avec gestion des conflits 409 ---
+      // --- pushToGitHub (inchangé) ---
       const pushToGitHub = async (retryCount = 0) => {
         if (!isTokenActive() || !ghConfig.owner || !ghConfig.repo) {
           const msg = "Token GitHub non activé.";
@@ -342,7 +342,7 @@
         addLog(msgStart, "info");
 
         const { token, owner, repo } = ghConfig;
-        const url = `https://api.github.com/repos/${owner}/${repo}/contents/products.json?t=${Date.now()}`; // cache-busting
+        const url = `https://api.github.com/repos/${owner}/${repo}/contents/products.json?t=${Date.now()}`;
         const content = JSON.stringify(dataPackage, null, 2);
         let contentBase64;
         try {
@@ -358,7 +358,6 @@
 
         try {
           let sha = null;
-          // GET avec cache-busting
           const resGet = await fetch(url, {
             headers: { Authorization: `token ${token}` }
           });
@@ -405,7 +404,6 @@
             showStatus("error", msg);
             addLog(msg, "error");
             if (retryCount < 3) {
-              // On attend un peu et on réessaye avec un nouveau SHA
               await new Promise(resolve => setTimeout(resolve, 2000));
               await pushToGitHub(retryCount + 1);
             } else {
@@ -433,7 +431,7 @@
         }
       };
 
-      // ---- loadFromGitHub avec cache-busting ----
+      // ---- loadFromGitHub avec TextDecoder pour UTF-8 ----
       const loadFromGitHub = async () => {
         if (!isTokenActive() || !ghConfig.owner || !ghConfig.repo) {
           setLoading(false);
@@ -451,7 +449,13 @@
           });
           if (res.ok) {
             const data = await res.json();
-            const decoded = atob(data.content);
+            // Décodage Base64 -> UTF-8 avec TextDecoder
+            const binaryString = atob(data.content);
+            const bytes = new Uint8Array(binaryString.length);
+            for (let i = 0; i < binaryString.length; i++) {
+              bytes[i] = binaryString.charCodeAt(i);
+            }
+            const decoded = new TextDecoder('utf-8').decode(bytes);
             addLog("Contenu décodé (début) : " + decoded.substring(0, 150) + "...", "info");
             const parsed = JSON.parse(decoded);
             if (parsed.products) {
