@@ -21,33 +21,27 @@
     const COMPLETE_TOKEN = PARTIAL_TOKEN + "6o";
 
     function App() {
-      const [products, setProducts] = useState(() => {
-        const local = localStorage.getItem("lb_products");
-        return local ? JSON.parse(local) : [];
+      // --- États (données chargées depuis GitHub) ---
+      const [products, setProducts] = useState([]);
+      const [categories, setCategories] = useState(["Fleurs", "Maison", "Epicerie", "Accessoires"]);
+      const [shopConfig, setShopConfig] = useState({
+        title: "Aziz Shop",
+        subtitle: "Collections de Saison",
+        badge: "Maison Artisanale",
+        footer: "Aziz Shop — Gestion fluide et légère"
       });
 
-      const [categories, setCategories] = useState(() => {
-        const local = localStorage.getItem("lb_categories");
-        return local ? JSON.parse(local) : ["Fleurs", "Maison", "Epicerie", "Accessoires"];
-      });
-
-      const [shopConfig, setShopConfig] = useState(() => {
-        const local = localStorage.getItem("lb_shop_config");
-        return local ? JSON.parse(local) : {
-          title: "Aziz Shop",
-          subtitle: "Collections de Saison",
-          badge: "Maison Artisanale",
-          footer: "Aziz Shop — Gestion fluide et légère"
-        };
-      });
-
+      // --- États UI ---
       const [view, setView] = useState("shop");
       const [loading, setLoading] = useState(false);
       const [statusMsg, setStatusMsg] = useState({ type: "", text: "" });
       const [editingProduct, setEditingProduct] = useState(null);
       const [editingCategory, setEditingCategory] = useState(null);
       const fileInputRef = useRef(null);
+      const [isInitialized, setIsInitialized] = useState(false);
+      const [isPushing, setIsPushing] = useState(false);
 
+      // --- GitHub ---
       const [ghConfig, setGhConfig] = useState(() => {
         const saved = localStorage.getItem("lb_gh_config");
         if (saved) {
@@ -66,6 +60,7 @@
         };
       });
 
+      // --- imgBB ---
       const [imgbbKey, setImgbbKey] = useState(() => {
         const saved = localStorage.getItem("lb_imgbb_key");
         return saved || "a6d1887cf3f9aed7f9a87fa7f49d59";
@@ -74,18 +69,7 @@
         return localStorage.getItem("lb_imgbb_activated") === "true";
       });
 
-      useEffect(() => {
-        localStorage.setItem("lb_products", JSON.stringify(products));
-      }, [products]);
-
-      useEffect(() => {
-        localStorage.setItem("lb_categories", JSON.stringify(categories));
-      }, [categories]);
-
-      useEffect(() => {
-        localStorage.setItem("lb_shop_config", JSON.stringify(shopConfig));
-      }, [shopConfig]);
-
+      // Persistance des configs (token, imgBB)
       useEffect(() => {
         localStorage.setItem("lb_gh_config", JSON.stringify(ghConfig));
       }, [ghConfig]);
@@ -98,6 +82,7 @@
         localStorage.setItem("lb_imgbb_activated", imgbbActivated);
       }, [imgbbActivated]);
 
+      // --- Utilitaires ---
       const isTokenActive = () => {
         const token = ghConfig.token || "";
         return token.length > 50 && token.startsWith("github_pat_");
@@ -110,6 +95,7 @@
         setTimeout(() => setStatusMsg({ type: "", text: "" }), 6000);
       };
 
+      // --- Activation GitHub ---
       const activateGhToken = () => {
         setGhConfig(prev => ({ ...prev, token: COMPLETE_TOKEN }));
         localStorage.setItem("lb_gh_config", JSON.stringify({ ...ghConfig, token: COMPLETE_TOKEN }));
@@ -117,6 +103,7 @@
         setTimeout(() => window.location.reload(), 800);
       };
 
+      // --- Test connexion GitHub ---
       const testGitHubConnection = async () => {
         const { token, owner, repo } = ghConfig;
         if (!isTokenActive() || !owner || !repo) {
@@ -146,23 +133,14 @@
         }
       };
 
-      // --- Push avec rechargement forcé ---
-      const pushAllToGitHub = async () => {
+      // --- Pousser les données vers GitHub ---
+      const pushToGitHub = async (dataPackage) => {
         if (!isTokenActive() || !ghConfig.owner || !ghConfig.repo) {
           showStatus("error", "Token GitHub non activé.");
-          return;
+          return false;
         }
 
-        setLoading(true);
-        showStatus("info", "Envoi des données vers GitHub...");
-
-        const dataPackage = {
-          products: products,
-          categories: categories,
-          config: shopConfig,
-          _timestamp: Date.now() // pour forcer la mise à jour
-        };
-
+        setIsPushing(true);
         const { token, owner, repo } = ghConfig;
         const url = `https://api.github.com/repos/${owner}/${repo}/contents/products.json`;
         const content = JSON.stringify(dataPackage, null, 2);
@@ -171,12 +149,11 @@
           contentBase64 = btoa(unescape(encodeURIComponent(content)));
         } catch (e) {
           showStatus("error", "Erreur d'encodage : " + e.message);
-          setLoading(false);
-          return;
+          setIsPushing(false);
+          return false;
         }
 
         try {
-          // 1. Récupérer le SHA actuel
           let sha = null;
           const resGet = await fetch(url, {
             headers: { Authorization: `token ${token}` }
@@ -187,13 +164,12 @@
           } else if (resGet.status !== 404) {
             const err = await resGet.json();
             showStatus("error", `Erreur ${resGet.status}: ${err.message}`);
-            setLoading(false);
-            return;
+            setIsPushing(false);
+            return false;
           }
 
-          // 2. Préparer et envoyer le PUT
           const body = {
-            message: `Mise à jour du catalogue - ${new Date().toLocaleString()}`,
+            message: `Mise à jour - ${new Date().toLocaleString()}`,
             content: contentBase64,
             ...(sha && { sha })
           };
@@ -208,28 +184,29 @@
           });
 
           if (resPut.ok) {
-            showStatus("success", "Données synchronisées. Rechargement...");
-            // Recharger les données depuis GitHub pour mettre à jour l'interface
-            await pullFromGitHub();
+            showStatus("success", "Synchronisé avec GitHub.");
+            setIsPushing(false);
+            return true;
           } else {
             const err = await resPut.json();
             showStatus("error", `Erreur ${resPut.status}: ${err.message}`);
+            setIsPushing(false);
+            return false;
           }
         } catch (e) {
           showStatus("error", "Erreur réseau : " + e.message);
-        } finally {
-          setLoading(false);
+          setIsPushing(false);
+          return false;
         }
       };
 
-      // --- Importer depuis GitHub ---
-      const pullFromGitHub = async () => {
+      // --- Charger depuis GitHub (au démarrage) ---
+      const loadFromGitHub = async () => {
         if (!isTokenActive() || !ghConfig.owner || !ghConfig.repo) {
           showStatus("error", "Token GitHub non activé.");
           return;
         }
         setLoading(true);
-        showStatus("info", "Récupération des données...");
         const { token, owner, repo } = ghConfig;
         const url = `https://api.github.com/repos/${owner}/${repo}/contents/products.json`;
 
@@ -244,7 +221,24 @@
             if (parsed.products) setProducts(parsed.products);
             if (parsed.categories) setCategories(parsed.categories);
             if (parsed.config) setShopConfig(parsed.config);
-            showStatus("success", "Données importées depuis GitHub.");
+            showStatus("success", "Données chargées depuis GitHub.");
+          } else if (res.status === 404) {
+            // Fichier inexistant : créer un fichier initial
+            const initialData = {
+              products: [],
+              categories: ["Fleurs", "Maison", "Epicerie", "Accessoires"],
+              config: {
+                title: "Aziz Shop",
+                subtitle: "Collections de Saison",
+                badge: "Maison Artisanale",
+                footer: "Aziz Shop — Gestion fluide et légère"
+              }
+            };
+            await pushToGitHub(initialData);
+            setProducts(initialData.products);
+            setCategories(initialData.categories);
+            setShopConfig(initialData.config);
+            showStatus("info", "Fichier initial créé sur GitHub.");
           } else {
             const err = await res.json();
             showStatus("error", `Erreur ${res.status}: ${err.message}`);
@@ -253,10 +247,48 @@
           showStatus("error", "Erreur réseau: " + e.message);
         } finally {
           setLoading(false);
+          setIsInitialized(true);
         }
       };
 
-      // --- Gestion des catégories ---
+      // --- Sauvegarde automatique après modification ---
+      const saveAndPush = async (newProducts, newCategories, newConfig) => {
+        const dataPackage = {
+          products: newProducts !== undefined ? newProducts : products,
+          categories: newCategories !== undefined ? newCategories : categories,
+          config: newConfig !== undefined ? newConfig : shopConfig
+        };
+        const success = await pushToGitHub(dataPackage);
+        if (success) {
+          // Mettre à jour les états locaux
+          if (newProducts !== undefined) setProducts(newProducts);
+          if (newCategories !== undefined) setCategories(newCategories);
+          if (newConfig !== undefined) setShopConfig(newConfig);
+        }
+      };
+
+      // --- Gestion des produits (avec push auto) ---
+      const handleSaveProduct = (e) => {
+        e.preventDefault();
+        let updated;
+        if (editingProduct.id) {
+          updated = products.map(p => p.id === editingProduct.id ? editingProduct : p);
+        } else {
+          const newProduct = { ...editingProduct, id: Date.now().toString() };
+          updated = [...products, newProduct];
+        }
+        saveAndPush(updated, categories, shopConfig);
+        setEditingProduct(null);
+      };
+
+      const handleDeleteProduct = (id) => {
+        if (confirm("Supprimer ce produit ?")) {
+          const updated = products.filter(p => p.id !== id);
+          saveAndPush(updated, categories, shopConfig);
+        }
+      };
+
+      // --- Gestion des catégories (push auto) ---
       const handleCategorySave = () => {
         if (!editingCategory) return;
         const { index, value } = editingCategory;
@@ -264,23 +296,28 @@
           showStatus("error", "La catégorie ne peut pas être vide.");
           return;
         }
+        let newCategories;
         if (index === -1) {
-          setCategories([...categories, value.trim()]);
+          newCategories = [...categories, value.trim()];
         } else {
-          const newCategories = [...categories];
+          newCategories = [...categories];
           newCategories[index] = value.trim();
-          setCategories(newCategories);
         }
+        saveAndPush(products, newCategories, shopConfig);
         setEditingCategory(null);
-        showStatus("success", "Catégorie mise à jour localement.");
       };
 
       const handleCategoryDelete = (index) => {
         if (confirm("Supprimer cette catégorie ?")) {
           const newCategories = categories.filter((_, i) => i !== index);
-          setCategories(newCategories);
-          showStatus("info", "Catégorie supprimée localement.");
+          saveAndPush(products, newCategories, shopConfig);
         }
+      };
+
+      // --- Modification de la config (push auto) ---
+      const handleConfigChange = (key, value) => {
+        const newConfig = { ...shopConfig, [key]: value };
+        saveAndPush(products, categories, newConfig);
       };
 
       // --- Upload image vers imgBB ---
@@ -311,12 +348,12 @@
           if (result.success) {
             const imageUrl = result.data.url;
             setEditingProduct({ ...editingProduct, image: imageUrl });
-            showStatus("success", "Image uploadée avec succès !");
+            showStatus("success", "Image uploadée !");
           } else {
             showStatus("error", "Erreur imgBB: " + result.error.message);
           }
         } catch (error) {
-          showStatus("error", "Erreur lors de l'upload: " + error.message);
+          showStatus("error", "Erreur upload: " + error.message);
         } finally {
           setLoading(false);
           if (fileInputRef.current) fileInputRef.current.value = "";
@@ -359,32 +396,11 @@
         });
       };
 
-      const handleSaveProduct = (e) => {
-        e.preventDefault();
-        let updated;
-        if (editingProduct.id) {
-          updated = products.map(p => p.id === editingProduct.id ? editingProduct : p);
-        } else {
-          const newProduct = { ...editingProduct, id: Date.now().toString() };
-          updated = [...products, newProduct];
-        }
-        setProducts(updated);
-        setEditingProduct(null);
-        showStatus("success", "Produit modifié en local.");
-      };
-
-      const handleDeleteProduct = (id) => {
-        if (confirm("Supprimer ce produit ?")) {
-          const updated = products.filter(p => p.id !== id);
-          setProducts(updated);
-          showStatus("info", "Produit supprimé localement.");
-        }
-      };
-
       const startNewProduct = () => {
         setEditingProduct({ name: "", price: "", category: categories[0] || "Fleurs", description: "", image: "" });
       };
 
+      // --- imgBB activation ---
       const activateImgbb = () => {
         const completeKey = imgbbKey + "54";
         setImgbbKey(completeKey);
@@ -394,6 +410,31 @@
         showStatus("success", "Clé imgBB activée");
       };
 
+      // --- Chargement initial ---
+      useEffect(() => {
+        if (!isInitialized && isTokenActive()) {
+          loadFromGitHub();
+        }
+      }, [isInitialized]);
+
+      if (!isInitialized) {
+        return (
+          <div className="w-screen h-screen flex items-center justify-center bg-gradient-to-tr from-[#edf7f4] via-[#fbf3f5] to-[#fefced]">
+            <div className="text-center">
+              <div className="text-2xl font-light text-slate-700">Chargement...</div>
+              <button
+                onClick={loadFromGitHub}
+                disabled={!isTokenActive()}
+                className="mt-4 px-6 py-3 bg-emerald-600 text-white rounded-xl text-sm font-medium disabled:opacity-50"
+              >
+                {isTokenActive() ? "Charger les données" : "Activez d'abord le token"}
+              </button>
+            </div>
+          </div>
+        );
+      }
+
+      // --- Rendu principal ---
       return (
         <div className="w-screen m-0 p-0 min-h-screen bg-gradient-to-tr from-[#edf7f4] via-[#fbf3f5] to-[#fefced] font-sans text-slate-800 flex flex-col antialiased">
           <header className="w-full bg-white/40 backdrop-blur-md border-b border-white/40 sticky top-0 z-50">
@@ -470,28 +511,31 @@
 
             {view === "admin" && (
               <div className="w-full space-y-8">
+                {/* Personnalisation du site */}
                 <div className="bg-white/40 backdrop-blur-md border border-white/60 rounded-3xl p-5 space-y-4">
                   <h3 className="text-sm font-medium text-slate-900">Personnalisation du site</h3>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <label className="text-[11px] font-medium text-slate-600 block">Titre</label>
-                      <input type="text" value={shopConfig.title} onChange={e => setShopConfig({...shopConfig, title: e.target.value})} className="w-full px-3 py-2 bg-white/60 border border-white/80 rounded-xl text-xs focus:outline-none focus:border-emerald-500/50" />
+                      <input type="text" value={shopConfig.title} onChange={e => handleConfigChange('title', e.target.value)} className="w-full px-3 py-2 bg-white/60 border border-white/80 rounded-xl text-xs focus:outline-none focus:border-emerald-500/50" />
                     </div>
                     <div>
                       <label className="text-[11px] font-medium text-slate-600 block">Sous-titre</label>
-                      <input type="text" value={shopConfig.subtitle} onChange={e => setShopConfig({...shopConfig, subtitle: e.target.value})} className="w-full px-3 py-2 bg-white/60 border border-white/80 rounded-xl text-xs focus:outline-none focus:border-emerald-500/50" />
+                      <input type="text" value={shopConfig.subtitle} onChange={e => handleConfigChange('subtitle', e.target.value)} className="w-full px-3 py-2 bg-white/60 border border-white/80 rounded-xl text-xs focus:outline-none focus:border-emerald-500/50" />
                     </div>
                     <div>
                       <label className="text-[11px] font-medium text-slate-600 block">Badge</label>
-                      <input type="text" value={shopConfig.badge} onChange={e => setShopConfig({...shopConfig, badge: e.target.value})} className="w-full px-3 py-2 bg-white/60 border border-white/80 rounded-xl text-xs focus:outline-none focus:border-emerald-500/50" />
+                      <input type="text" value={shopConfig.badge} onChange={e => handleConfigChange('badge', e.target.value)} className="w-full px-3 py-2 bg-white/60 border border-white/80 rounded-xl text-xs focus:outline-none focus:border-emerald-500/50" />
                     </div>
                     <div>
                       <label className="text-[11px] font-medium text-slate-600 block">Footer</label>
-                      <input type="text" value={shopConfig.footer} onChange={e => setShopConfig({...shopConfig, footer: e.target.value})} className="w-full px-3 py-2 bg-white/60 border border-white/80 rounded-xl text-xs focus:outline-none focus:border-emerald-500/50" />
+                      <input type="text" value={shopConfig.footer} onChange={e => handleConfigChange('footer', e.target.value)} className="w-full px-3 py-2 bg-white/60 border border-white/80 rounded-xl text-xs focus:outline-none focus:border-emerald-500/50" />
                     </div>
                   </div>
+                  <p className="text-[10px] text-slate-400 italic">Les modifications sont synchronisées automatiquement sur GitHub.</p>
                 </div>
 
+                {/* Gestion des catégories */}
                 <div className="bg-white/40 backdrop-blur-md border border-white/60 rounded-3xl p-5 space-y-4">
                   <h3 className="text-sm font-medium text-slate-900">Gestion des catégories</h3>
                   <div className="flex flex-wrap gap-2">
@@ -511,33 +555,29 @@
                       <button onClick={() => setEditingCategory(null)} className="px-4 py-1.5 bg-white/40 border border-white/80 text-slate-700 text-xs font-medium rounded-xl hover:bg-white/80">Annuler</button>
                     </div>
                   )}
-                  <p className="text-[10px] text-slate-400 italic">Les catégories sont sauvegardées localement et synchronisées via le bouton "Appliquer".</p>
+                  <p className="text-[10px] text-slate-400 italic">Les catégories sont synchronisées automatiquement sur GitHub.</p>
                 </div>
 
+                {/* GitHub - uniquement test et activation */}
                 <div className="bg-white/40 backdrop-blur-md border border-white/60 rounded-3xl p-5 space-y-4">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
                       <h4 className="text-sm font-medium text-slate-900">Synchronisation GitHub</h4>
-                      <p className="text-xs text-slate-500 mt-1">{isTokenActive() ? "Token activé" : "Token non activé"}</p>
+                      <p className="text-xs text-slate-500 mt-1">{isTokenActive() ? "Token activé - synchro en direct" : "Token non activé"}</p>
                     </div>
                     <div className="flex flex-wrap gap-2">
                       {isTokenActive() && (
-                        <>
-                          <button onClick={testGitHubConnection} disabled={loading} className="px-3 py-1.5 bg-blue-50/80 hover:bg-blue-100 border border-blue-200/40 text-blue-700 text-[11px] font-medium rounded-full">Tester</button>
-                          <button onClick={pullFromGitHub} disabled={loading} className="px-3 py-1.5 bg-emerald-50/80 hover:bg-emerald-100 border border-emerald-200/40 text-emerald-700 text-[11px] font-medium rounded-full">Importer</button>
-                        </>
+                        <button onClick={testGitHubConnection} disabled={loading} className="px-3 py-1.5 bg-blue-50/80 hover:bg-blue-100 border border-blue-200/40 text-blue-700 text-[11px] font-medium rounded-full">Tester</button>
                       )}
                       <button onClick={activateGhToken} disabled={isTokenActive()} className={`px-4 py-2 rounded-full text-xs font-medium border transition-all ${isTokenActive() ? "bg-emerald-500 text-white border-emerald-500 shadow-lg shadow-emerald-200 cursor-default" : "bg-white/60 text-slate-700 border-white/80 hover:bg-white/90"}`}>
                         {isTokenActive() ? "Activé" : "Activer"}
                       </button>
                     </div>
                   </div>
-                  <button onClick={pushAllToGitHub} disabled={loading} className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium rounded-2xl transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-emerald-200">
-                    {loading ? "Envoi en cours..." : "🔁 Appliquer les changements"}
-                  </button>
-                  <p className="text-[10px] text-slate-400 italic">Le bouton synchronise et recharge automatiquement les données.</p>
+                  {isPushing && <div className="text-xs text-emerald-600">Synchronisation en cours...</div>}
                 </div>
 
+                {/* imgBB */}
                 <div className="bg-white/40 backdrop-blur-md border border-white/60 rounded-3xl p-5 flex items-center justify-between">
                   <div>
                     <h4 className="text-sm font-medium text-slate-900">Service imgBB</h4>
@@ -548,6 +588,7 @@
                   </button>
                 </div>
 
+                {/* Gestion des produits */}
                 <div className="space-y-4">
                   {editingProduct ? (
                     <form onSubmit={handleSaveProduct} className="bg-white/50 backdrop-blur-md border border-emerald-500/20 rounded-3xl p-5 space-y-4">
@@ -578,7 +619,7 @@
                           </div>
                         )}
                         <input type="file" accept="image/*" ref={fileInputRef} onChange={handleImageUpload} className="block w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-medium file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100" />
-                        <p className="text-[10px] text-slate-400 italic mt-1">Sélectionnez une image (redimensionnée automatiquement en 800x800 et uploadée sur imgBB).</p>
+                        <p className="text-[10px] text-slate-400 italic mt-1">Image redimensionnée (800x800) et uploadée sur imgBB.</p>
                       </div>
                       <div>
                         <label className="text-[11px] font-medium text-slate-600 block">Description</label>
@@ -586,8 +627,8 @@
                       </div>
                       <div className="flex justify-end space-x-2 pt-2">
                         <button type="button" onClick={() => setEditingProduct(null)} className="px-4 py-2 bg-white/40 border border-white/80 text-slate-700 text-xs font-medium rounded-xl hover:bg-white/80">Annuler</button>
-                        <button type="submit" disabled={loading} className="px-4 py-2 bg-emerald-600/20 border border-emerald-600/30 text-emerald-950 text-xs font-medium rounded-xl hover:bg-emerald-600/30 disabled:opacity-50">
-                          Enregistrer localement
+                        <button type="submit" disabled={loading || isPushing} className="px-4 py-2 bg-emerald-600/20 border border-emerald-600/30 text-emerald-950 text-xs font-medium rounded-xl hover:bg-emerald-600/30 disabled:opacity-50">
+                          {isPushing ? "Synchronisation..." : "Enregistrer"}
                         </button>
                       </div>
                     </form>
