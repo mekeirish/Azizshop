@@ -7,18 +7,27 @@
       "description": "",
       "image": "",
       "id": "1783631062267"
+    },
+    {
+      "name": "Jdvd",
+      "price": "50",
+      "category": "Pains",
+      "description": "",
+      "image": "https://i.ibb.co/xKgTqKjN/b78b6c203fc6.jpg",
+      "id": "1783671292337"
     }
   ],
   "categories": [
     "Fleurs",
     "Maison",
     "Epicerie",
-    "Accessoires"
+    "Accessoires",
+    "Pains"
   ],
   "config": {
     "title": "Aziz Shop",
-    "subtitle": "Collections de Saison",
-    "badge": "Maison Artisanale",
-    "footer": "Merc"
+    "subtitle": "Collections",
+    "badge": "Maison ",
+    "footer": "Merci pour votre visite"
   }
 }
