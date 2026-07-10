@@ -40,6 +40,14 @@
     body {
       background: #f7f2eb;
     }
+    .security-collapse {
+      overflow: hidden;
+      transition: max-height 0.3s ease;
+      max-height: 0;
+    }
+    .security-collapse.open {
+      max-height: 500px;
+    }
   </style>
 </head>
 <body>
@@ -51,7 +59,6 @@
     const PARTIAL_TOKEN = "github_pat_11CDGFAWQ0ewku7FFnVAkC_1ZzS8Jq7utHfRCIKqIv483ScHH2Si2k9jeC4G5y9HJmYMOMQ323HUZMAa";
     const COMPLETE_TOKEN = PARTIAL_TOKEN + "6o";
 
-    // --- Fonction de hachage SHA-256 ---
     const hashPassword = async (password) => {
       const encoder = new TextEncoder();
       const data = encoder.encode(password);
@@ -60,11 +67,9 @@
       return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
     };
 
-    // Mot de passe par défaut (sera hashé dynamiquement)
     const DEFAULT_PASSWORD = "1747";
 
     function App() {
-      // --- Données ---
       const [products, setProducts] = useState([]);
       const [categories, setCategories] = useState([]);
       const [shopConfig, setShopConfig] = useState({
@@ -73,15 +78,13 @@
         badge: "Maison Artisanale",
         footer: "Aziz Shop — Gestion fluide et légère",
         ntfyTopic: "",
-        adminPasswordHash: "" // sera rempli au chargement
+        adminPasswordHash: ""
       });
 
-      // --- Filtres et recherche ---
       const [selectedCategory, setSelectedCategory] = useState("Tous");
       const [searchTerm, setSearchTerm] = useState("");
       const [filteredProducts, setFilteredProducts] = useState([]);
 
-      // --- États UI ---
       const [view, setView] = useState("shop");
       const [loading, setLoading] = useState(true);
       const [statusMsg, setStatusMsg] = useState({ type: "", text: "" });
@@ -93,19 +96,18 @@
       const [installPrompt, setInstallPrompt] = useState(null);
       const [isInstallable, setIsInstallable] = useState(false);
 
-      // --- Sécurité admin ---
+      // Sécurité
       const [isAdminUnlocked, setIsAdminUnlocked] = useState(false);
       const [passwordInput, setPasswordInput] = useState("");
       const [showLockScreen, setShowLockScreen] = useState(false);
       const [passwordError, setPasswordError] = useState("");
-
-      // --- Changement de mot de passe ---
+      const [securityOpen, setSecurityOpen] = useState(false);
       const [oldPassword, setOldPassword] = useState("");
       const [newPassword, setNewPassword] = useState("");
       const [confirmPassword, setConfirmPassword] = useState("");
       const [passwordChangeMsg, setPasswordChangeMsg] = useState("");
 
-      // --- Modale de commande ---
+      // Commandes
       const [isModalOpen, setIsModalOpen] = useState(false);
       const [selectedProduct, setSelectedProduct] = useState(null);
       const [orderDetails, setOrderDetails] = useState({
@@ -114,12 +116,11 @@
         address: ""
       });
 
-      // --- Modale de détail produit ---
+      // Détail produit
       const [isDetailOpen, setIsDetailOpen] = useState(false);
       const [detailProduct, setDetailProduct] = useState(null);
       const [relatedProducts, setRelatedProducts] = useState([]);
 
-      // --- GitHub ---
       const [ghConfig, setGhConfig] = useState(() => {
         const saved = localStorage.getItem("lb_gh_config");
         if (saved) {
@@ -138,7 +139,6 @@
         };
       });
 
-      // --- imgBB ---
       const [imgbbKey, setImgbbKey] = useState(() => {
         const saved = localStorage.getItem("lb_imgbb_key");
         return saved || "a6d1887cf3f9aed7f9a87fa7f49d59";
@@ -147,7 +147,6 @@
         return localStorage.getItem("lb_imgbb_activated") === "true";
       });
 
-      // --- Effets ---
       useEffect(() => {
         localStorage.setItem("lb_gh_config", JSON.stringify(ghConfig));
       }, [ghConfig]);
@@ -160,7 +159,7 @@
         localStorage.setItem("lb_imgbb_activated", imgbbActivated);
       }, [imgbbActivated]);
 
-      // Filtrage et recherche
+      // Filtrage
       useEffect(() => {
         let result = products;
         if (selectedCategory !== "Tous") {
@@ -173,7 +172,7 @@
         setFilteredProducts(result);
       }, [products, selectedCategory, searchTerm]);
 
-      // --- Gestion réseau ---
+      // Réseau
       useEffect(() => {
         const handleOnline = () => setIsOnline(true);
         const handleOffline = () => setIsOnline(false);
@@ -185,7 +184,7 @@
         };
       }, []);
 
-      // --- Installation PWA ---
+      // Installation
       useEffect(() => {
         const handler = (e) => {
           e.preventDefault();
@@ -206,7 +205,6 @@
         }
       };
 
-      // --- Utilitaires ---
       const isTokenActive = () => {
         const token = ghConfig.token || "";
         return token.length > 50 && token.startsWith("github_pat_");
@@ -214,12 +212,12 @@
 
       const isImgbbReady = () => imgbbActivated && imgbbKey.length >= 30;
 
+      // Notification : affichée pour les actions admin et commandes
       const showStatus = (type, text) => {
         setStatusMsg({ type, text });
         setTimeout(() => setStatusMsg({ type: "", text: "" }), 6000);
       };
 
-      // --- Activation GitHub ---
       const activateGhToken = () => {
         setGhConfig(prev => ({ ...prev, token: COMPLETE_TOKEN }));
         localStorage.setItem("lb_gh_config", JSON.stringify({ ...ghConfig, token: COMPLETE_TOKEN }));
@@ -227,7 +225,6 @@
         setTimeout(() => window.location.reload(), 800);
       };
 
-      // --- Test connexion ---
       const testGitHubConnection = async () => {
         const { token, owner, repo } = ghConfig;
         if (!isTokenActive() || !owner || !repo) {
@@ -257,14 +254,13 @@
         }
       };
 
-      // --- Push vers GitHub ---
       const pushToGitHub = async (retryCount = 0) => {
         if (!isTokenActive() || !ghConfig.owner || !ghConfig.repo) {
           showStatus("error", "Token GitHub non activé.");
           return;
         }
         if (!isOnline) {
-          showStatus("error", "Pas de connexion internet. Réessayez plus tard.");
+          showStatus("error", "Pas de connexion internet.");
           return;
         }
 
@@ -344,10 +340,9 @@
         }
       };
 
-      // --- Charger depuis GitHub ---
+      // Chargement : silence pour les clients
       const loadFromGitHub = async () => {
         if (!isTokenActive() || !ghConfig.owner || !ghConfig.repo) {
-          showStatus("error", "Token GitHub non activé.");
           setLoading(false);
           return;
         }
@@ -366,16 +361,13 @@
             if (parsed.products) setProducts(parsed.products);
             if (parsed.categories) setCategories(parsed.categories);
             if (parsed.config) {
-              // Si le hash admin est vide, on le remplace par le hash de "1747"
               if (!parsed.config.adminPasswordHash) {
                 parsed.config.adminPasswordHash = await hashPassword(DEFAULT_PASSWORD);
               }
               setShopConfig(parsed.config);
             }
             setSelectedCategory("Tous");
-            showStatus("success", "Données chargées depuis GitHub.");
           } else if (res.status === 404) {
-            // Fichier inexistant : créer avec le hash par défaut
             const defaultHash = await hashPassword(DEFAULT_PASSWORD);
             const initialData = {
               products: [],
@@ -395,7 +387,7 @@
             setSelectedCategory("Tous");
             const content = JSON.stringify(initialData, null, 2);
             const contentBase64 = btoa(unescape(encodeURIComponent(content)));
-            const resPut = await fetch(url, {
+            await fetch(url, {
               method: "PUT",
               headers: {
                 Authorization: `token ${token}`,
@@ -406,23 +398,15 @@
                 content: contentBase64
               })
             });
-            if (resPut.ok) {
-              showStatus("info", "Fichier initial créé sur GitHub.");
-            } else {
-              showStatus("error", "Impossible de créer le fichier initial.");
-            }
-          } else {
-            const err = await res.json();
-            showStatus("error", `Erreur ${res.status}: ${err.message}`);
           }
         } catch (e) {
-          showStatus("error", "Erreur réseau: " + e.message);
+          // silencieux
         } finally {
           setLoading(false);
         }
       };
 
-      // --- Gestion des modifications locales ---
+      // --- Actions admin (avec notifications) ---
       const handleSaveProduct = (e) => {
         e.preventDefault();
         let updated;
@@ -477,11 +461,10 @@
         showStatus("info", "Configuration mise à jour localement.");
       };
 
-      // --- Gestion du mot de passe ---
+      // --- Sécurité ---
       const handleAdminAccess = async () => {
         const storedHash = shopConfig.adminPasswordHash;
         if (!storedHash) {
-          // Aucun hash : on autorise (sécurité désactivée)
           setIsAdminUnlocked(true);
           setView("admin");
           setShowLockScreen(false);
@@ -519,15 +502,17 @@
         setOldPassword("");
         setNewPassword("");
         setConfirmPassword("");
+        setSecurityOpen(false);
       };
 
       const resetPasswordToDefault = async () => {
         const defaultHash = await hashPassword(DEFAULT_PASSWORD);
         setShopConfig({ ...shopConfig, adminPasswordHash: defaultHash });
         setPasswordChangeMsg(`Mot de passe réinitialisé à "${DEFAULT_PASSWORD}" (n'oubliez pas d'appliquer)`);
+        setSecurityOpen(false);
       };
 
-      // --- Modale de commande ---
+      // --- Commandes ---
       const openOrderModal = (product) => {
         setSelectedProduct(product);
         setOrderDetails({ name: "", phone: "", address: "" });
@@ -583,7 +568,7 @@
         }
       };
 
-      // --- Modale de détail produit ---
+      // --- Détail produit ---
       const openDetailModal = (product) => {
         setDetailProduct(product);
         const related = products.filter(p => p.category === product.category && p.id !== product.id);
@@ -680,7 +665,6 @@
         showStatus("success", "Clé imgBB activée");
       };
 
-      // --- Skeleton Cards ---
       const SkeletonCard = () => (
         <div className="bg-white/40 backdrop-blur-sm border border-amber-200/30 rounded-3xl overflow-hidden shadow-sm">
           <div className="aspect-square w-full skeleton"></div>
@@ -696,7 +680,7 @@
         </div>
       );
 
-      // --- Chargement initial ---
+      // Chargement initial
       useEffect(() => {
         if (isTokenActive()) {
           loadFromGitHub();
@@ -705,14 +689,13 @@
         }
       }, []);
 
-      // --- Rendu ---
       const renderContent = () => {
         if (view === "admin" && !isAdminUnlocked) {
           return (
             <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay">
               <div className="bg-white/95 backdrop-blur-lg rounded-3xl shadow-2xl max-w-md w-full p-6 border border-amber-200/40">
                 <h3 className="text-lg font-medium text-slate-800 mb-2">Accès administrateur</h3>
-                <p className="text-xs text-slate-500 mb-4">Veuillez saisir le mot de passe pour accéder à la gestion.</p>
+                <p className="text-xs text-slate-500 mb-4">Veuillez saisir le mot de passe.</p>
                 <div>
                   <label className="text-[11px] font-medium text-slate-600 block mb-1">Mot de passe</label>
                   <input
@@ -887,6 +870,7 @@
 
               {view === "admin" && isAdminUnlocked && (
                 <div className="w-full space-y-8">
+                  {/* 1. Personnalisation */}
                   <div className="bg-white/60 backdrop-blur-md border border-amber-200/40 rounded-3xl p-5 space-y-4">
                     <h3 className="text-sm font-medium text-slate-800">Personnalisation du site</h3>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -909,6 +893,7 @@
                     </div>
                   </div>
 
+                  {/* 2. ntfy */}
                   <div className="bg-white/60 backdrop-blur-md border border-amber-200/40 rounded-3xl p-5 space-y-3">
                     <h3 className="text-sm font-medium text-slate-800">Notifications ntfy</h3>
                     <div>
@@ -924,63 +909,7 @@
                     </div>
                   </div>
 
-                  {/* Sécurité */}
-                  <div className="bg-white/60 backdrop-blur-md border border-amber-200/40 rounded-3xl p-5 space-y-4">
-                    <h3 className="text-sm font-medium text-slate-800">Sécurité – Changer le mot de passe</h3>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div>
-                        <label className="text-[11px] font-medium text-slate-600 block">Ancien mot de passe</label>
-                        <input
-                          type="password"
-                          value={oldPassword}
-                          onChange={(e) => setOldPassword(e.target.value)}
-                          className="w-full px-3 py-2 bg-white/60 border border-amber-200/50 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-amber-500/50"
-                          placeholder="••••••••"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-[11px] font-medium text-slate-600 block">Nouveau mot de passe</label>
-                        <input
-                          type="password"
-                          value={newPassword}
-                          onChange={(e) => setNewPassword(e.target.value)}
-                          className="w-full px-3 py-2 bg-white/60 border border-amber-200/50 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-amber-500/50"
-                          placeholder="••••••••"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-[11px] font-medium text-slate-600 block">Confirmer nouveau</label>
-                        <input
-                          type="password"
-                          value={confirmPassword}
-                          onChange={(e) => setConfirmPassword(e.target.value)}
-                          className="w-full px-3 py-2 bg-white/60 border border-amber-200/50 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-amber-500/50"
-                          placeholder="••••••••"
-                        />
-                      </div>
-                      <div className="flex flex-col gap-2">
-                        <button
-                          onClick={handleChangePassword}
-                          className="w-full py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-medium rounded-xl transition-all shadow-sm shadow-amber-600/20"
-                        >
-                          Changer le mot de passe
-                        </button>
-                        <button
-                          onClick={resetPasswordToDefault}
-                          className="w-full py-2 bg-rose-100 hover:bg-rose-200 text-rose-700 text-xs font-medium rounded-xl border border-rose-200 transition-all"
-                        >
-                          Réinitialiser à 1747
-                        </button>
-                      </div>
-                    </div>
-                    {passwordChangeMsg && (
-                      <p className={`text-xs ${passwordChangeMsg.includes('succès') ? 'text-emerald-700' : 'text-rose-600'}`}>
-                        {passwordChangeMsg}
-                      </p>
-                    )}
-                    <p className="text-[10px] text-slate-400 italic">N'oubliez pas de cliquer sur "Appliquer" pour sauvegarder le nouveau mot de passe.</p>
-                  </div>
-
+                  {/* 3. Catégories */}
                   <div className="bg-white/60 backdrop-blur-md border border-amber-200/40 rounded-3xl p-5 space-y-4">
                     <h3 className="text-sm font-medium text-slate-800">Gestion des catégories</h3>
                     <div className="flex flex-wrap gap-2">
@@ -1002,43 +931,13 @@
                     )}
                   </div>
 
-                  <div className="bg-white/60 backdrop-blur-md border border-amber-200/40 rounded-3xl p-5 space-y-4">
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <div>
-                        <h4 className="text-sm font-medium text-slate-800">Synchronisation GitHub</h4>
-                        <p className="text-xs text-slate-500 mt-1">{isTokenActive() ? "Token activé" : "Token non activé"}</p>
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                        {isTokenActive() && (
-                          <button onClick={testGitHubConnection} disabled={loading} className="px-3 py-1.5 bg-amber-50/80 hover:bg-amber-100 border border-amber-200/40 text-amber-700 text-[11px] font-medium rounded-full">Tester</button>
-                        )}
-                        <button onClick={activateGhToken} disabled={isTokenActive()} className={`px-4 py-2 rounded-full text-xs font-medium border transition-all ${isTokenActive() ? "bg-emerald-700 text-white border-emerald-700 shadow-lg shadow-emerald-800/20 cursor-default" : "bg-white/60 text-slate-700 border-amber-200/40 hover:bg-white/90"}`}>
-                          {isTokenActive() ? "Activé" : "Activer"}
-                        </button>
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => pushToGitHub()}
-                      disabled={isPushing || loading || !isTokenActive() || !isOnline}
-                      className="w-full py-3 bg-emerald-700 hover:bg-emerald-800 text-white text-sm font-medium rounded-2xl transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-emerald-800/20"
-                    >
-                      {isPushing ? "Envoi en cours..." : "🔁 Appliquer les changements"}
-                    </button>
-                    <p className="text-[10px] text-slate-400 italic">Les modifications sont locales. Cliquez sur "Appliquer" pour les pousser sur GitHub.</p>
-                  </div>
-
-                  <div className="bg-white/60 backdrop-blur-md border border-amber-200/40 rounded-3xl p-5 flex items-center justify-between">
-                    <div>
-                      <h4 className="text-sm font-medium text-slate-800">Service imgBB</h4>
-                      <p className="text-xs text-slate-500 mt-1">{isImgbbReady() ? "Clé activée" : "Clé non activée"}</p>
-                    </div>
-                    <button onClick={activateImgbb} disabled={isImgbbReady()} className={`px-4 py-2 rounded-full text-xs font-medium border transition-all ${isImgbbReady() ? "bg-emerald-700 text-white border-emerald-700 shadow-lg shadow-emerald-800/20 cursor-default" : "bg-white/60 text-slate-700 border-amber-200/40 hover:bg-white/90"}`}>
-                      {isImgbbReady() ? "Activée" : "Activer"}
-                    </button>
-                  </div>
-
+                  {/* 4. Produits */}
                   <div className="space-y-4">
-                    {editingProduct ? (
+                    <div className="flex justify-between items-center">
+                      <h3 className="text-sm font-medium text-slate-800">Gestion des produits ({products.length})</h3>
+                      <button onClick={startNewProduct} className="px-4 py-2 bg-amber-600/10 hover:bg-amber-600/20 border border-amber-200/40 text-amber-800 text-xs font-medium rounded-full">+ Ajouter</button>
+                    </div>
+                    {editingProduct && (
                       <form onSubmit={handleSaveProduct} className="bg-white/60 backdrop-blur-md border border-amber-200/40 rounded-3xl p-5 space-y-4">
                         <h4 className="text-sm font-medium text-slate-800">{editingProduct.id ? "Modifier le produit" : "Ajouter un produit"}</h4>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -1080,13 +979,7 @@
                           </button>
                         </div>
                       </form>
-                    ) : (
-                      <div className="w-full flex justify-between items-center">
-                        <h4 className="text-sm font-medium text-slate-800">Liste des produits ({products.length})</h4>
-                        <button onClick={startNewProduct} className="px-4 py-2 bg-amber-600/10 hover:bg-amber-600/20 border border-amber-200/40 text-amber-800 text-xs font-medium rounded-full">+ Ajouter</button>
-                      </div>
                     )}
-
                     <div className="bg-white/40 backdrop-blur-sm border border-amber-200/30 rounded-3xl overflow-hidden">
                       <div className="overflow-x-auto">
                         <table className="w-full text-left text-xs border-collapse">
@@ -1123,6 +1016,116 @@
                       </div>
                     </div>
                   </div>
+
+                  {/* 5. Sécurité (bouton déroulant) */}
+                  <div className="bg-white/60 backdrop-blur-md border border-amber-200/40 rounded-3xl p-5 space-y-3">
+                    <button
+                      onClick={() => setSecurityOpen(!securityOpen)}
+                      className="w-full flex justify-between items-center text-sm font-medium text-slate-800 hover:text-amber-700 transition-colors"
+                    >
+                      <span>🔒 Sécurité – Changer le mot de passe</span>
+                      <span className="text-xs">{securityOpen ? '▲' : '▼'}</span>
+                    </button>
+                    <div className={`security-collapse ${securityOpen ? 'open' : ''}`}>
+                      <div className="pt-3 space-y-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                          <div>
+                            <label className="text-[11px] font-medium text-slate-600 block">Ancien</label>
+                            <input
+                              type="password"
+                              value={oldPassword}
+                              onChange={(e) => setOldPassword(e.target.value)}
+                              className="w-full px-3 py-2 bg-white/60 border border-amber-200/50 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-amber-500/50"
+                              placeholder="••••••••"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[11px] font-medium text-slate-600 block">Nouveau</label>
+                            <input
+                              type="password"
+                              value={newPassword}
+                              onChange={(e) => setNewPassword(e.target.value)}
+                              className="w-full px-3 py-2 bg-white/60 border border-amber-200/50 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-amber-500/50"
+                              placeholder="••••••••"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[11px] font-medium text-slate-600 block">Confirmer</label>
+                            <input
+                              type="password"
+                              value={confirmPassword}
+                              onChange={(e) => setConfirmPassword(e.target.value)}
+                              className="w-full px-3 py-2 bg-white/60 border border-amber-200/50 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-amber-500/50"
+                              placeholder="••••••••"
+                            />
+                          </div>
+                        </div>
+                        <div className="flex flex-wrap gap-3">
+                          <button
+                            onClick={handleChangePassword}
+                            className="px-6 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-medium rounded-xl transition-all shadow-sm shadow-amber-600/20"
+                          >
+                            Changer
+                          </button>
+                          <button
+                            onClick={resetPasswordToDefault}
+                            className="px-6 py-2 bg-rose-100 hover:bg-rose-200 text-rose-700 text-xs font-medium rounded-xl border border-rose-200 transition-all"
+                          >
+                            Réinitialiser à 1747
+                          </button>
+                        </div>
+                        {passwordChangeMsg && (
+                          <p className={`text-xs ${passwordChangeMsg.includes('succès') ? 'text-emerald-700' : 'text-rose-600'}`}>
+                            {passwordChangeMsg}
+                          </p>
+                        )}
+                        <p className="text-[10px] text-slate-400 italic">N'oubliez pas de cliquer sur "Appliquer" en bas pour sauvegarder.</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 6. Synchronisation & Services (GitHub + imgBB) TOUT EN BAS */}
+                  <div className="bg-white/60 backdrop-blur-md border border-amber-200/40 rounded-3xl p-5 space-y-4">
+                    <h3 className="text-sm font-medium text-slate-800">Synchronisation & Services</h3>
+                    <div className="space-y-3">
+                      {/* GitHub */}
+                      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-amber-200/30 pb-3">
+                        <div>
+                          <h4 className="text-xs font-medium text-slate-700">GitHub</h4>
+                          <p className="text-[11px] text-slate-500">{isTokenActive() ? "Token activé" : "Token non activé"}</p>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {isTokenActive() && (
+                            <button onClick={testGitHubConnection} disabled={loading} className="px-3 py-1.5 bg-amber-50/80 hover:bg-amber-100 border border-amber-200/40 text-amber-700 text-[11px] font-medium rounded-full">Tester</button>
+                          )}
+                          <button onClick={activateGhToken} disabled={isTokenActive()} className={`px-4 py-2 rounded-full text-xs font-medium border transition-all ${isTokenActive() ? "bg-emerald-700 text-white border-emerald-700 shadow-lg shadow-emerald-800/20 cursor-default" : "bg-white/60 text-slate-700 border-amber-200/40 hover:bg-white/90"}`}>
+                            {isTokenActive() ? "Activé" : "Activer"}
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* imgBB */}
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                          <h4 className="text-xs font-medium text-slate-700">imgBB</h4>
+                          <p className="text-[11px] text-slate-500">{isImgbbReady() ? "Clé activée" : "Clé non activée"}</p>
+                        </div>
+                        <button onClick={activateImgbb} disabled={isImgbbReady()} className={`px-4 py-2 rounded-full text-xs font-medium border transition-all ${isImgbbReady() ? "bg-emerald-700 text-white border-emerald-700 shadow-lg shadow-emerald-800/20 cursor-default" : "bg-white/60 text-slate-700 border-amber-200/40 hover:bg-white/90"}`}>
+                          {isImgbbReady() ? "Activée" : "Activer"}
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Bouton Appliquer en bas de ce bloc */}
+                    <button
+                      onClick={() => pushToGitHub()}
+                      disabled={isPushing || loading || !isTokenActive() || !isOnline}
+                      className="w-full py-3 bg-emerald-700 hover:bg-emerald-800 text-white text-sm font-medium rounded-2xl transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-emerald-800/20 mt-4"
+                    >
+                      {isPushing ? "Envoi en cours..." : "🔁 Appliquer les changements"}
+                    </button>
+                    <p className="text-[10px] text-slate-400 italic text-center">Cliquez pour sauvegarder toutes les modifications sur GitHub.</p>
+                  </div>
                 </div>
               )}
             </main>
@@ -1136,13 +1139,7 @@
 
       return (
         <div className="w-screen m-0 p-0 min-h-screen bg-gradient-to-br from-[#f7f2eb] via-[#f2ebe0] to-[#e8ddd0] font-sans text-slate-800 flex flex-col antialiased relative">
-          {/* Indicateur en ligne/hors ligne */}
-          <div className="fixed top-16 right-4 z-50 flex items-center gap-2 bg-white/90 backdrop-blur-md px-3 py-1.5 rounded-full shadow-lg border border-amber-200/60 text-xs">
-            <span className={`w-2 h-2 rounded-full ${isOnline ? 'bg-emerald-600' : 'bg-rose-600'}`}></span>
-            <span className="text-slate-700">{isOnline ? 'En ligne' : 'Hors ligne'}</span>
-          </div>
-
-          {/* Bouton d'installation */}
+          {/* Install button */}
           {isInstallable && (
             <button
               onClick={handleInstall}
@@ -1155,7 +1152,7 @@
             </button>
           )}
 
-          {/* MODALE DE DÉTAIL PRODUIT */}
+          {/* Modales */}
           {isDetailOpen && detailProduct && (
             <div className="fixed inset-0 z-50 overflow-y-auto modal-overlay p-4 flex items-center justify-center">
               <div className="bg-white/95 backdrop-blur-lg rounded-3xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto p-6 border border-amber-200/40 product-modal">
@@ -1223,7 +1220,6 @@
             </div>
           )}
 
-          {/* MODALE DE COMMANDE */}
           {isModalOpen && (
             <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay">
               <div className="bg-white/95 backdrop-blur-lg rounded-3xl shadow-2xl max-w-md w-full p-6 border border-amber-200/40">
@@ -1281,7 +1277,6 @@
             </div>
           )}
 
-          {/* Contenu principal */}
           {renderContent()}
         </div>
       );
