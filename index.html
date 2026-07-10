@@ -116,7 +116,6 @@
         navigator.clipboard.writeText(text).then(() => {
           showStatus('success', 'Logs copiés dans le presse-papier');
         }).catch(() => {
-          // fallback
           const textarea = document.createElement('textarea');
           textarea.value = text;
           document.body.appendChild(textarea);
@@ -127,7 +126,6 @@
         });
       };
 
-      // --- États classiques ---
       const [selectedCategory, setSelectedCategory] = useState("Tous");
       const [searchTerm, setSearchTerm] = useState("");
       const [filteredProducts, setFilteredProducts] = useState([]);
@@ -313,6 +311,7 @@
         }
       };
 
+      // ---- Fonction pushToGitHub avec rechargement automatique après succès ----
       const pushToGitHub = async (retryCount = 0) => {
         if (!isTokenActive() || !ghConfig.owner || !ghConfig.repo) {
           const msg = "Token GitHub non activé.";
@@ -391,9 +390,11 @@
           });
 
           if (resPut.ok) {
-            const msg = "Synchronisation réussie !";
+            const msg = "Synchronisation réussie ! Rechargement des données...";
             showStatus("success", msg);
             addLog(msg, "success");
+            // ---- Recharger les données depuis GitHub pour rafraîchir l'interface ----
+            await loadFromGitHub();
           } else {
             const err = await resPut.json();
             const msg = `Erreur ${resPut.status}: ${err.message}`;
@@ -420,7 +421,7 @@
         }
       };
 
-      // Chargement silencieux (logs ajoutés pour debug)
+      // Chargement (silencieux pour les clients, mais logs pour debug)
       const loadFromGitHub = async () => {
         if (!isTokenActive() || !ghConfig.owner || !ghConfig.repo) {
           setLoading(false);
@@ -449,7 +450,7 @@
               setShopConfig(parsed.config);
             }
             setSelectedCategory("Tous");
-            addLog("Données chargées avec succès (" + (parsed.products?.length || 0) + " produits)", "success");
+            addLog("Données rechargées avec succès (" + (parsed.products?.length || 0) + " produits)", "success");
           } else if (res.status === 404) {
             const defaultHash = await hashPassword(DEFAULT_PASSWORD);
             const initialData = {
@@ -497,7 +498,7 @@
         }
       };
 
-      // --- Actions admin ---
+      // --- Actions admin (inchangées) ---
       const handleSaveProduct = (e) => {
         e.preventDefault();
         let updated;
@@ -1135,7 +1136,7 @@
                     </div>
                   </div>
 
-                  {/* 5. Sécurité (déroulant) */}
+                  {/* 5. Sécurité */}
                   <div className="bg-white/60 backdrop-blur-md border border-amber-200/40 rounded-3xl p-5 space-y-3">
                     <button
                       onClick={() => setSecurityOpen(!securityOpen)}
@@ -1202,11 +1203,10 @@
                     </div>
                   </div>
 
-                  {/* 6. Synchronisation & Services (GitHub + imgBB) avec console de logs */}
+                  {/* 6. Synchronisation & Services (GitHub + imgBB) avec console */}
                   <div className="bg-white/60 backdrop-blur-md border border-amber-200/40 rounded-3xl p-5 space-y-4">
                     <h3 className="text-sm font-medium text-slate-800">Synchronisation & Services</h3>
                     <div className="space-y-3">
-                      {/* GitHub */}
                       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-amber-200/30 pb-3">
                         <div>
                           <h4 className="text-xs font-medium text-slate-700">GitHub</h4>
@@ -1222,7 +1222,6 @@
                         </div>
                       </div>
 
-                      {/* imgBB */}
                       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-amber-200/30 pb-3">
                         <div>
                           <h4 className="text-xs font-medium text-slate-700">imgBB</h4>
@@ -1233,7 +1232,6 @@
                         </button>
                       </div>
 
-                      {/* Bouton Appliquer */}
                       <button
                         onClick={() => pushToGitHub()}
                         disabled={isPushing || loading || !isTokenActive() || !isOnline}
@@ -1307,7 +1305,6 @@
 
       return (
         <div className="w-screen m-0 p-0 min-h-screen bg-gradient-to-br from-[#f7f2eb] via-[#f2ebe0] to-[#e8ddd0] font-sans text-slate-800 flex flex-col antialiased relative">
-          {/* Bouton d'installation */}
           {isInstallable && (
             <button
               onClick={handleInstall}
@@ -1320,7 +1317,6 @@
             </button>
           )}
 
-          {/* Modale détail */}
           {isDetailOpen && detailProduct && (
             <div className="fixed inset-0 z-50 overflow-y-auto modal-overlay p-4 flex items-center justify-center">
               <div className="bg-white/95 backdrop-blur-lg rounded-3xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto p-6 border border-amber-200/40 product-modal">
@@ -1388,7 +1384,6 @@
             </div>
           )}
 
-          {/* Modale commande */}
           {isModalOpen && (
             <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay">
               <div className="bg-white/95 backdrop-blur-lg rounded-3xl shadow-2xl max-w-md w-full p-6 border border-amber-200/40">
