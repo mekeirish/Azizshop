@@ -89,6 +89,24 @@
 
     const DEFAULT_PASSWORD = "1747";
 
+    // --- Fonctions d'encodage/décodage UTF-8 Base64 fiables ---
+    const utf8ToBase64 = (str) => {
+      const encoder = new TextEncoder();
+      const data = encoder.encode(str);
+      const uint8Array = new Uint8Array(data);
+      const binaryString = String.fromCharCode(...uint8Array);
+      return btoa(binaryString);
+    };
+
+    const base64ToUtf8 = (base64) => {
+      const binaryString = atob(base64);
+      const bytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+      return new TextDecoder('utf-8').decode(bytes);
+    };
+
     function App() {
       const [products, setProducts] = useState([]);
       const [categories, setCategories] = useState([]);
@@ -314,7 +332,7 @@
         }
       };
 
-      // --- pushToGitHub (inchangé) ---
+      // --- pushToGitHub avec encodage UTF-8 fiable ---
       const pushToGitHub = async (retryCount = 0) => {
         if (!isTokenActive() || !ghConfig.owner || !ghConfig.repo) {
           const msg = "Token GitHub non activé.";
@@ -344,9 +362,11 @@
         const { token, owner, repo } = ghConfig;
         const url = `https://api.github.com/repos/${owner}/${repo}/contents/products.json?t=${Date.now()}`;
         const content = JSON.stringify(dataPackage, null, 2);
+
+        // Encodage UTF-8 -> Base64 fiable
         let contentBase64;
         try {
-          contentBase64 = btoa(unescape(encodeURIComponent(content)));
+          contentBase64 = utf8ToBase64(content);
         } catch (e) {
           const msg = "Erreur d'encodage : " + e.message;
           showStatus("error", msg);
@@ -431,7 +451,7 @@
         }
       };
 
-      // ---- loadFromGitHub avec TextDecoder pour UTF-8 ----
+      // ---- loadFromGitHub avec décodage UTF-8 fiable ---
       const loadFromGitHub = async () => {
         if (!isTokenActive() || !ghConfig.owner || !ghConfig.repo) {
           setLoading(false);
@@ -449,13 +469,7 @@
           });
           if (res.ok) {
             const data = await res.json();
-            // Décodage Base64 -> UTF-8 avec TextDecoder
-            const binaryString = atob(data.content);
-            const bytes = new Uint8Array(binaryString.length);
-            for (let i = 0; i < binaryString.length; i++) {
-              bytes[i] = binaryString.charCodeAt(i);
-            }
-            const decoded = new TextDecoder('utf-8').decode(bytes);
+            const decoded = base64ToUtf8(data.content);
             addLog("Contenu décodé (début) : " + decoded.substring(0, 150) + "...", "info");
             const parsed = JSON.parse(decoded);
             if (parsed.products) {
@@ -490,7 +504,7 @@
             setShopConfig(initialData.config);
             setSelectedCategory("Tous");
             const content = JSON.stringify(initialData, null, 2);
-            const contentBase64 = btoa(unescape(encodeURIComponent(content)));
+            const contentBase64 = utf8ToBase64(content);
             const resPut = await fetch(url, {
               method: "PUT",
               headers: {
