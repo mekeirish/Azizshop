@@ -31,11 +31,20 @@
       "description": "",
       "image": "https://i.ibb.co/2JgKdf1/28d4f861918e.jpg",
       "id": "1783693066221"
+    },
+    {
+      "name": "khjjh",
+      "price": "20",
+      "category": "jojo",
+      "description": "",
+      "image": "https://i.ibb.co/qLtL2CZY/6232a39216cb.jpg",
+      "id": "1783694027822"
     }
   ],
   "categories": [
     "Accessoires",
-    "Pains"
+    "Pains",
+    "jojo"
   ],
   "config": {
     "title": "Aziz Shop",
