@@ -15,6 +15,14 @@
       "description": "",
       "image": "https://i.ibb.co/xKgTqKjN/b78b6c203fc6.jpg",
       "id": "1783671292337"
+    },
+    {
+      "name": "Moli",
+      "price": "48",
+      "category": "Pains",
+      "description": "Hwhdgd",
+      "image": "https://i.ibb.co/7tc77BGB/25fdfc51ec4b.jpg",
+      "id": "1783681251796"
     }
   ],
   "categories": [
@@ -26,6 +34,7 @@
     "subtitle": "Collections",
     "badge": "Maison ",
     "footer": "Merci pour votre visite",
-    "ntfyTopic": "azizshop14"
+    "ntfyTopic": "azizshop14",
+    "adminPasswordHash": "262fbc155dc2e68571f7fa9487fd573282232b97a1c23dbf398f41fd8eaf175b"
   }
 }
