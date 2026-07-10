@@ -101,7 +101,7 @@
         adminPasswordHash: ""
       });
 
-      // --- Logs console ---
+      // --- Logs ---
       const [logs, setLogs] = useState([]);
       const [logShow, setLogShow] = useState(false);
 
@@ -114,7 +114,7 @@
       const copyLogs = () => {
         const text = logs.map(l => `[${l.timestamp}] ${l.message}`).join('\n');
         navigator.clipboard.writeText(text).then(() => {
-          showStatus('success', 'Logs copiés dans le presse-papier');
+          showStatus('success', 'Logs copiés');
         }).catch(() => {
           const textarea = document.createElement('textarea');
           textarea.value = text;
@@ -126,6 +126,7 @@
         });
       };
 
+      // --- États ---
       const [selectedCategory, setSelectedCategory] = useState("Tous");
       const [searchTerm, setSearchTerm] = useState("");
       const [filteredProducts, setFilteredProducts] = useState([]);
@@ -166,6 +167,7 @@
       const [detailProduct, setDetailProduct] = useState(null);
       const [relatedProducts, setRelatedProducts] = useState([]);
 
+      // GitHub config
       const [ghConfig, setGhConfig] = useState(() => {
         const saved = localStorage.getItem("lb_gh_config");
         if (saved) {
@@ -184,6 +186,7 @@
         };
       });
 
+      // imgBB
       const [imgbbKey, setImgbbKey] = useState(() => {
         const saved = localStorage.getItem("lb_imgbb_key");
         return saved || "a6d1887cf3f9aed7f9a87fa7f49d59";
@@ -192,6 +195,7 @@
         return localStorage.getItem("lb_imgbb_activated") === "true";
       });
 
+      // --- Effets ---
       useEffect(() => {
         localStorage.setItem("lb_gh_config", JSON.stringify(ghConfig));
       }, [ghConfig]);
@@ -257,7 +261,6 @@
 
       const isImgbbReady = () => imgbbActivated && imgbbKey.length >= 30;
 
-      // Notification
       const showStatus = (type, text) => {
         setStatusMsg({ type, text });
         setTimeout(() => setStatusMsg({ type: "", text: "" }), 6000);
@@ -311,7 +314,7 @@
         }
       };
 
-      // ---- Fonction pushToGitHub avec rechargement automatique après succès ----
+      // ---- pushToGitHub avec délai et rechargement robuste ----
       const pushToGitHub = async (retryCount = 0) => {
         if (!isTokenActive() || !ghConfig.owner || !ghConfig.repo) {
           const msg = "Token GitHub non activé.";
@@ -390,10 +393,12 @@
           });
 
           if (resPut.ok) {
-            const msg = "Synchronisation réussie ! Rechargement des données...";
+            const msg = "Synchronisation réussie ! Rechargement des données après 2 secondes...";
             showStatus("success", msg);
             addLog(msg, "success");
-            // ---- Recharger les données depuis GitHub pour rafraîchir l'interface ----
+            // Attendre 2 secondes pour que GitHub propage la modification
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            // Recharger les données depuis GitHub
             await loadFromGitHub();
           } else {
             const err = await resPut.json();
@@ -421,7 +426,7 @@
         }
       };
 
-      // Chargement (silencieux pour les clients, mais logs pour debug)
+      // ---- loadFromGitHub avec logs détaillés ----
       const loadFromGitHub = async () => {
         if (!isTokenActive() || !ghConfig.owner || !ghConfig.repo) {
           setLoading(false);
@@ -440,8 +445,12 @@
           if (res.ok) {
             const data = await res.json();
             const decoded = atob(data.content);
+            addLog("Contenu décodé (début) : " + decoded.substring(0, 150) + "...", "info");
             const parsed = JSON.parse(decoded);
-            if (parsed.products) setProducts(parsed.products);
+            if (parsed.products) {
+              setProducts(parsed.products);
+              addLog("Produits mis à jour : " + parsed.products.length + " produits", "success");
+            }
             if (parsed.categories) setCategories(parsed.categories);
             if (parsed.config) {
               if (!parsed.config.adminPasswordHash) {
@@ -808,6 +817,7 @@
         }
       }, []);
 
+      // --- Rendu (inchangé) ---
       const renderContent = () => {
         if (view === "admin" && !isAdminUnlocked) {
           return (
@@ -989,7 +999,7 @@
 
               {view === "admin" && isAdminUnlocked && (
                 <div className="w-full space-y-8">
-                  {/* 1. Personnalisation */}
+                  {/* Personnalisation */}
                   <div className="bg-white/60 backdrop-blur-md border border-amber-200/40 rounded-3xl p-5 space-y-4">
                     <h3 className="text-sm font-medium text-slate-800">Personnalisation du site</h3>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -1012,7 +1022,7 @@
                     </div>
                   </div>
 
-                  {/* 2. ntfy */}
+                  {/* ntfy */}
                   <div className="bg-white/60 backdrop-blur-md border border-amber-200/40 rounded-3xl p-5 space-y-3">
                     <h3 className="text-sm font-medium text-slate-800">Notifications ntfy</h3>
                     <div>
@@ -1028,7 +1038,7 @@
                     </div>
                   </div>
 
-                  {/* 3. Catégories */}
+                  {/* Catégories */}
                   <div className="bg-white/60 backdrop-blur-md border border-amber-200/40 rounded-3xl p-5 space-y-4">
                     <h3 className="text-sm font-medium text-slate-800">Gestion des catégories</h3>
                     <div className="flex flex-wrap gap-2">
@@ -1050,7 +1060,7 @@
                     )}
                   </div>
 
-                  {/* 4. Produits */}
+                  {/* Produits */}
                   <div className="space-y-4">
                     <div className="flex justify-between items-center">
                       <h3 className="text-sm font-medium text-slate-800">Gestion des produits ({products.length})</h3>
@@ -1136,7 +1146,7 @@
                     </div>
                   </div>
 
-                  {/* 5. Sécurité */}
+                  {/* Sécurité */}
                   <div className="bg-white/60 backdrop-blur-md border border-amber-200/40 rounded-3xl p-5 space-y-3">
                     <button
                       onClick={() => setSecurityOpen(!securityOpen)}
@@ -1203,7 +1213,7 @@
                     </div>
                   </div>
 
-                  {/* 6. Synchronisation & Services (GitHub + imgBB) avec console */}
+                  {/* Synchronisation & Services */}
                   <div className="bg-white/60 backdrop-blur-md border border-amber-200/40 rounded-3xl p-5 space-y-4">
                     <h3 className="text-sm font-medium text-slate-800">Synchronisation & Services</h3>
                     <div className="space-y-3">
@@ -1320,29 +1330,18 @@
           {isDetailOpen && detailProduct && (
             <div className="fixed inset-0 z-50 overflow-y-auto modal-overlay p-4 flex items-center justify-center">
               <div className="bg-white/95 backdrop-blur-lg rounded-3xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto p-6 border border-amber-200/40 product-modal">
-                <button
-                  onClick={closeDetailModal}
-                  className="float-right text-2xl text-slate-500 hover:text-slate-800 transition-colors"
-                >
-                  ✕
-                </button>
+                <button onClick={closeDetailModal} className="float-right text-2xl text-slate-500 hover:text-slate-800 transition-colors">✕</button>
                 <div className="flex flex-col md:flex-row gap-6 mt-2">
                   <div className="md:w-1/2">
                     {detailProduct.image ? (
-                      <img
-                        src={detailProduct.image}
-                        alt={detailProduct.name}
-                        className="w-full aspect-square object-cover rounded-2xl shadow-lg border border-amber-100"
-                      />
+                      <img src={detailProduct.image} alt={detailProduct.name} className="w-full aspect-square object-cover rounded-2xl shadow-lg border border-amber-100" />
                     ) : (
                       <div className="w-full aspect-square bg-amber-50/60 rounded-2xl flex items-center justify-center text-amber-400 text-6xl">🖼️</div>
                     )}
                   </div>
                   <div className="md:w-1/2 space-y-4">
                     <h2 className="text-3xl font-semibold text-slate-800">{detailProduct.name}</h2>
-                    <span className="inline-block bg-emerald-100 text-emerald-800 text-xs font-medium px-3 py-1 rounded-full">
-                      {detailProduct.category}
-                    </span>
+                    <span className="inline-block bg-emerald-100 text-emerald-800 text-xs font-medium px-3 py-1 rounded-full">{detailProduct.category}</span>
                     <p className="text-2xl font-light text-emerald-800">{parseFloat(detailProduct.price).toFixed(2)} DZD</p>
                     <p className="text-sm text-slate-600 leading-relaxed">{detailProduct.description || "Description non disponible."}</p>
                     <button
@@ -1353,7 +1352,6 @@
                     </button>
                   </div>
                 </div>
-
                 {relatedProducts.length > 0 && (
                   <div className="mt-8 border-t border-amber-200/40 pt-6">
                     <h3 className="text-sm font-medium text-slate-700 mb-4">Autres produits dans la même catégorie</h3>
