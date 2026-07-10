@@ -3,7 +3,7 @@
     {
       "name": "Caba",
       "price": "3500",
-      "category": "VÃªtements",
+      "category": "VÃÂªtements",
       "description": "",
       "image": "https://i.ibb.co/VYkbtgcM/34f9fab087ba.jpg",
       "id": "1783696579976"
@@ -11,7 +11,7 @@
     {
       "name": "Caba France ",
       "price": "3500",
-      "category": "VÃªtements",
+      "category": "VÃÂªtements",
       "description": "",
       "image": "https://i.ibb.co/XZyLxqyq/361975b83707.jpg",
       "id": "1783696603905"
@@ -19,7 +19,7 @@
     {
       "name": "La toile marron ",
       "price": "3500",
-      "category": "VÃªtements",
+      "category": "VÃÂªtements",
       "description": "",
       "image": "https://i.ibb.co/WN9fyX8k/c9697fc8e2ec.jpg",
       "id": "1783696643038"
@@ -27,22 +27,22 @@
     {
       "name": "Caba 100%",
       "price": "3500",
-      "category": "VÃªtements",
+      "category": "VÃÂªtements",
       "description": "",
       "image": "https://i.ibb.co/gLHb5DcM/f9887a3f817f.jpg",
       "id": "1783696684103"
     },
     {
-      "name": "Survêtement Caba",
+      "name": "SurvÃªtement Caba",
       "price": "3000",
-      "category": "VÃªtements",
+      "category": "VÃÂªtements",
       "description": "",
       "image": "https://i.ibb.co/vxynKJD7/9de81124cadc.jpg",
       "id": "1783696721711"
     }
   ],
   "categories": [
-    "VÃªtements",
+    "VÃÂªtements",
     "CaBa"
   ],
   "config": {
