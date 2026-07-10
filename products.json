@@ -39,6 +39,22 @@
       "description": "",
       "image": "https://i.ibb.co/vxynKJD7/9de81124cadc.jpg",
       "id": "1783696721711"
+    },
+    {
+      "name": "Survêtement ",
+      "price": "50",
+      "category": "Survetement",
+      "description": "",
+      "image": "https://i.ibb.co/xKgTqKjN/b78b6c203fc6.jpg",
+      "id": "1783698135825"
+    },
+    {
+      "name": "دلاعة",
+      "price": "20",
+      "category": "Survetement",
+      "description": "",
+      "image": "https://i.ibb.co/xKgTqKjN/b78b6c203fc6.jpg",
+      "id": "1783698162952"
     }
   ],
   "categories": [
