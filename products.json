@@ -1,66 +1,49 @@
 {
   "products": [
     {
-      "name": "Jdvd",
-      "price": "50",
-      "category": "Pains",
-      "description": "",
-      "image": "https://i.ibb.co/xKgTqKjN/b78b6c203fc6.jpg",
-      "id": "1783671292337"
-    },
-    {
-      "name": "Moli",
-      "price": "48",
-      "category": "Pains",
-      "description": "Hwhdgd",
-      "image": "https://i.ibb.co/7tc77BGB/25fdfc51ec4b.jpg",
-      "id": "1783681251796"
-    },
-    {
-      "name": "Pantalon para",
+      "name": "سروال جين كابة 🇪🇺💯 ",
       "price": "3500",
-      "category": "Accessoires",
+      "category": "Vêtements",
       "description": "",
-      "image": "",
-      "id": "1783690754975"
+      "image": "https://i.ibb.co/VYkbtgcM/34f9fab087ba.jpg",
+      "id": "1783696579976"
     },
     {
-      "name": "dghjjsj",
-      "price": "10",
-      "category": "Accessoires",
-      "description": "",
-      "image": "https://i.ibb.co/2JgKdf1/28d4f861918e.jpg",
-      "id": "1783693066221"
-    },
-    {
-      "name": "khjjh",
-      "price": "20",
-      "category": "jojo",
-      "description": "",
-      "image": "https://i.ibb.co/qLtL2CZY/6232a39216cb.jpg",
-      "id": "1783694027822"
-    },
-    {
-      "name": "Pantalon marron ",
+      "name": "💯Caba🇪🇺",
       "price": "3500",
-      "category": "Accessoires",
+      "category": "Vêtements",
       "description": "",
-      "image": "",
-      "id": "1783694541900"
+      "image": "https://i.ibb.co/XZyLxqyq/361975b83707.jpg",
+      "id": "1783696603905"
     },
     {
-      "name": "Cart graphique ",
-      "price": "20000",
-      "category": "Accessoires",
+      "name": "💯Caba🇪🇺",
+      "price": "3500",
+      "category": "Vêtements",
       "description": "",
-      "image": "https://i.ibb.co/6J7XFZJD/67d1465add4b.jpg",
-      "id": "1783695042683"
+      "image": "https://i.ibb.co/WN9fyX8k/c9697fc8e2ec.jpg",
+      "id": "1783696643038"
+    },
+    {
+      "name": "سروال لاطوال كابة 🇪🇺💯 ",
+      "price": "3500",
+      "category": "Vêtements",
+      "description": "",
+      "image": "https://i.ibb.co/gLHb5DcM/f9887a3f817f.jpg",
+      "id": "1783696684103"
+    },
+    {
+      "name": "Survêtement Caba 💯🇪🇺",
+      "price": "3000",
+      "category": "Vêtements",
+      "description": "",
+      "image": "https://i.ibb.co/vxynKJD7/9de81124cadc.jpg",
+      "id": "1783696721711"
     }
   ],
   "categories": [
-    "Accessoires",
-    "Pains",
-    "jojo"
+    "Vêtements",
+    "CaBa"
   ],
   "config": {
     "title": "Aziz Shop",
